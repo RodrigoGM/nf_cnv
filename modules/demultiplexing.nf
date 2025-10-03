@@ -23,20 +23,11 @@ process AGGREGATE_FASTQ_CHECKS {
     path check_files
     
     output:
-    path "fastq_pairs_summary.tsv"
+    path "fastq_pairs_summary.txt"
     
     script:
     """
-    // Create TSV header
-    echo -e "sample_id\\tr1_file\\tr1_reads\\tr2_reads\\tsynchronized" > fastq_pairs_summary.tsv
-    
-    // Process each check file and add sample ID
-    for check_file in ${check_files}; do
-        sample=\$(basename "\$check_file" _check.txt)
-        while read -r line; do
-           echo -e "${sample}\\t\$line" >> fastq_pairs_summary.tmp
-        done < "\$check_file"
-    done
+    cat ${check_files} | sort -k1V > cell_fastq_pairs_summary.txt
     """
 }
 
@@ -102,18 +93,10 @@ process AGGREGATE_CELL_CHECKS {
     
     script:
     """
-    // Create header
-    echo -e "cell_id\\tr1_file\\tr1_reads\\tr2_reads\\tsynchronized" > cell_fastq_pairs_summary.txt
-    
-    // Process each cell check file
-    for check_file in ${check_files}; do
-        cell_id=\$(basename "\$check_file" _check.txt)
-        while read -r line; do
-        echo -e "\${cell_id}\\t\$line" >> cell_fastq_pairs_summary.tmp
-        done < "\$check_file"
-    done
+    cat ${check_files} | sort -k1V > cell_fastq_pairs_summary.txt
     """
 }
+
 
 // Aggregate barcode splitting statistics
 process AGGREGATE_BARCODE_STATS {
@@ -131,6 +114,6 @@ process AGGREGATE_BARCODE_STATS {
     echo -e "sample_id\\tbarcode_name\\tbarcode_seq\\tcell_reads" > barcode_split_summary.tsv
     
     // Concatenate all statistics files
-    cat ${stats_files} >> barcode_split_summary.tsv
+    cat ${stats_files} | sort -k1V -k2V >> barcode_split_summary.tsv
     """
 }
