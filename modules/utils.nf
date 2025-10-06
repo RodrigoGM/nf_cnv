@@ -62,3 +62,23 @@ def discoverMergedFastqPairs(merged_path) {
     
     return pairs
 }
+
+// load barcodes
+def loadBarcodes(barcode_file) {
+    def barcodes = []
+    def barcode_path = file(barcode_file)
+    
+    if (!barcode_path.exists()) {
+        error "Barcode file not found: ${barcode_path}"
+    }
+    
+    barcode_path.eachLine { line ->
+        def fields = line.trim().split(/\s+/)
+        if (fields.size() >= 2) {
+            barcodes.add([fields[0], fields[1]])  // [barcode_name, barcode_sequence]
+        }
+    }
+    
+    return barcodes
+}
+

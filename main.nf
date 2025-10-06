@@ -4,7 +4,10 @@ nextflow.enable.dsl=2
 // Import modules
 include { CAT_FASTQ } from './modules/nf-core/cat/fastq/main'
 include { discoverFastqFiles; createManifestData; loadBarcodes } from './modules/utils'
-include { CHECK_FASTQ_PAIRS; AGGREGATE_FASTQ_CHECKS; BARCODE_SPLIT; CHECK_CELL_FASTQ_PAIRS; AGGREGATE_CELL_CHECKS; AGGREGATE_BARCODE_STATS } from './modules/demultiplexing'
+include { CHECK_FASTQ_PAIRS; AGGREGATE_FASTQ_CHECKS; BARCODE_SPLIT;
+	 CHECK_CELL_FASTQ_PAIRS; AGGREGATE_CELL_CHECKS; AGGREGATE_BARCODE_STATS } from './modules/demultiplexing'
+// QC Imports
+include { FASTQC } from './modules/nf-core/fastqc/main'
 
 // Global Parameters
 params.seqdata = "${launchDir}/seqdata"
@@ -58,14 +61,16 @@ workflow {
     // Create concatenation manifest
     manifest_data = createManifestData(samples)
     CREATE_FASTQ_MANIFEST(Channel.value(manifest_data))
+
     
     // STEP 2: FASTQ PAIR VERIFICATION
     // Verify merged FASTQ pairs are synchronized
     merged_pairs_ch = CAT_FASTQ.out.reads.map { meta, reads ->
-        [meta.id, reads[0], reads[1]]
+	[meta.id, reads[0], reads[1]]
     }
-    
+
     CHECK_FASTQ_PAIRS(merged_pairs_ch)
+    
     AGGREGATE_FASTQ_CHECKS(CHECK_FASTQ_PAIRS.out.check_results.map { it[1] }.collect())
     log.info "FASTQ pair verification completed"
     
@@ -94,4 +99,13 @@ workflow {
     AGGREGATE_BARCODE_STATS(BARCODE_SPLIT.out.stats.map { it[2] }.collect())
     
     log.info "Pipeline completed: ${samples.size()} samples, ${barcodes.size()} barcodes per sample"
+
+    // STEP 5: CELL-LEVEL QUALITY CONTROL
+// Run FastQC on demultiplexed cell FASTQ files
+    cell_fastq_for_qc = BARCODE_SPLIT.out.cell_fastqs.map { cell_id, r1, r2 -> 
+	[[id: cell_id, single_end: false], [r1, r2]]
+    }
+    FASTQC(cell_fastq_for_qc)
+    
+    log.info "FastQC analysis completed on demultiplexed cells"
 }
