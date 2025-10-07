@@ -382,10 +382,13 @@ fi
 
 # Load required modules
 echo -e "${YELLOW}Loading modules...${NC}"
-module load nextflow || {
-    echo -e "${RED}Error: Failed to load nextflow module${NC}"
-    exit 1
-}
+if [[ "${CONDA_DEFAULT_ENV:-}" != "single-cell-cnv" ]]; then
+    echo "Activating single-cell-cnv environment..."
+    conda activate single-cell-cnv || {
+        echo "Error: Failed to activate single-cell-cnv environment"
+        exit 1
+    }
+fi
 
 # Check if config files exist
 if [ ! -f "config/nextflow.config" ]; then
@@ -484,7 +487,7 @@ cat > "$PROJECT_DIR/README.md" << EOL
 $PROJECT_NAME/
 ├── config/                    # Configuration files
 │   ├── nextflow.config        # Main pipeline configuration
-│   └── samples.csv            # Sample metadata
+│   └─ samples.csv            # Sample metadata
 ├── seqdata/                   # Raw sequencing data (FASTQ files)
 ├── results/                   # Pipeline outputs
 │   ├── merged/                # Concatenated FASTQ files
@@ -787,17 +790,17 @@ echo -e "${GREEN}✓ Created .gitignore file${NC}"
 
 # Final summary and instructions
 echo -e "\n${CYAN}=================================================${NC}"
-echo -e "${GREEN}🎉 Project '$PROJECT_NAME' Successfully Initialized! 🎉${NC}"
+echo -e "${GREEN} Project '$PROJECT_NAME' Successfully Initialized! ${NC}"
 echo -e "${CYAN}=================================================${NC}"
 
-echo -e "\n${BLUE}📁 Project Structure Created:${NC}"
+echo -e "\n${BLUE} Project Structure Created:${NC}"
 echo -e "   ${GREEN}✓${NC} Configuration files in config/"
 echo -e "   ${GREEN}✓${NC} Execution script: run_pipeline.sh"
 echo -e "   ${GREEN}✓${NC} Documentation: README.md"
 echo -e "   ${GREEN}✓${NC} Quick reference guide"
 echo -e "   ${GREEN}✓${NC} Directory structure for results and logs"
 
-echo -e "\n${PURPLE}📋 Next Steps:${NC}"
+echo -e "\n${PURPLE} Next Steps:${NC}"
 echo -e "   ${YELLOW}1.${NC} Review and edit sample information:"
 echo -e "      ${CYAN}nano config/samples.csv${NC}"
 echo -e "   ${YELLOW}2.${NC} Verify pipeline configuration:"
@@ -809,7 +812,7 @@ echo -e "      ${CYAN}./run_pipeline.sh --dry-run${NC}"
 echo -e "   ${YELLOW}5.${NC} Run the pipeline:"
 echo -e "      ${CYAN}sbatch run_pipeline.sh${NC}"
 
-echo -e "\n${BLUE}📖 Documentation:${NC}"
+echo -e "\n${BLUE} Documentation:${NC}"
 echo -e "   • ${CYAN}README.md${NC} - Complete project documentation"
 echo -e "   • ${CYAN}QUICK_REFERENCE.md${NC} - Essential commands"
 echo -e "   • ${CYAN}config/project_info.yaml${NC} - Configuration summary"
