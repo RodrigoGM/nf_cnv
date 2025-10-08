@@ -12,8 +12,8 @@ include { FASTQC } from './modules/nf-core/fastqc/main'
 
 // Read Alignment
 include { BWA_MEM; COLLATE_BAM; FIXMATE_BAM; SORT_BAM; MARK_DUPLICATES;
-	 REMOVE_DUPLICATES; BAM_QC_METRICS; AGGREGATE_ALIGNMENT_METRICS;
-	 FILTER_AND_EXTRACT_READS; VALIDATE_BAM } from './modules/alignment'
+	 REMOVE_DUPLICATES; FILTER_AND_EXTRACT_READS; VALIDATE_BAM } from './modules/alignment'
+	 
 
 
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -155,16 +155,7 @@ workflow {
 
     // Parallel processing for marked and deduplicated BAMs
     MARK_DUPLICATES(SORT_BAM.out.sorted_bam)
-    REMOVE_DUPLICATES(SORT_BAM.out.sorted_bam)
-
-    // QC metrics on marked duplicates BAM
-    BAM_QC_METRICS(MARK_DUPLICATES.out.marked_bam)
-
-    // Aggregate QC metrics
-    AGGREGATE_ALIGNMENT_METRICS(
-	BAM_QC_METRICS.out.alignment_metrics.collect(),
-	BAM_QC_METRICS.out.insert_metrics.collect()
-    )
+    REMOVE_DUPLICATES(MARK_DUPLICATES.out.marked_bam)
 
     log.info "Alignment workflow completed for genome: ${params.genome}"
     
@@ -173,7 +164,7 @@ workflow {
     strand_suffix = params.use_reverse_reads ? 'RV' : 'FW'
     FILTER_AND_EXTRACT_READS(REMOVE_DUPLICATES.out.dedup_bam)
     
-    log.info "Post-processing completed: extracted ${strand_suffix} reads for single-end analysis"
+    log.info "Post-alignment filtering complete: extracted ${strand_suffix} reads for single-end analysis"
     
 }
 

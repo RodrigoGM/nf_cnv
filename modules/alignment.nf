@@ -1,4 +1,4 @@
-// BWA-MEM alignment process
+// Initial BWA-MEM alignment 
 process BWA_MEM {
     tag "${cell_id}"
     
@@ -29,6 +29,7 @@ process BWA_MEM {
     """
 }
 
+// samtools collate / group sorting to fix mate
 process COLLATE_BAM {
     tag "${cell_id}"
     
@@ -44,6 +45,7 @@ process COLLATE_BAM {
     """
 }
 
+// samtools fix mate information
 process FIXMATE_BAM {
     tag "${cell_id}"
     
@@ -59,6 +61,7 @@ process FIXMATE_BAM {
     """
 }
 
+// samtools sort bam
 process SORT_BAM {
     tag "${cell_id}"
     
@@ -74,21 +77,25 @@ process SORT_BAM {
     """
 }
 
-
+// Picard mark duplicates without deleting
 process MARK_DUPLICATES {
     tag "${cell_id}"
-    publishDir "${params.outdir}/results/bwa_out_md", mode: 'copy', 
-               pattern: "*.${params.genome}.PE.md.bam*"
-    
+    publishDir "${params.outdir}/results/bwa_out_md", mode: 'copy',
+              pattern: "*.${params.genome}.PE.md.bam*"
+
     input:
     tuple val(cell_id), path(sorted_bam)
-    
+
     output:
-    tuple val(cell_id), path("${cell_id}.${params.genome}.PE.md.bam"), 
+    tuple val(cell_id), path("${cell_id}.${params.genome}.PE.md.bam"),
           path("${cell_id}.${params.genome}.PE.md.bam.bai"), emit: marked_bam
-    path "${cell_id}.dup_metrics.txt", emit: dup_metrics
-    
+    path "${cell_id}.dup_metrics.txt", emit: markdup_metrics
+
     script:
+    def optical_params = params.no_optical_duplicates ? 
+        "-READ_NAME_REGEX null" : 
+        "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance}"
+    
     """
     # Check if BAM has alignments
     read_count=\$(samtools view -c ${sorted_bam})
@@ -106,133 +113,54 @@ process MARK_DUPLICATES {
             -CREATE_INDEX true \\
             -VALIDATION_STRINGENCY LENIENT \\
             -ASSUME_SORT_ORDER coordinate \\
-            -OPTICAL_DUPLICATE_PIXEL_DISTANCE 2500
+            ${optical_params}
     fi
     """
 }
 
+// Picard remove duplicates
 process REMOVE_DUPLICATES {
     tag "${cell_id}"
     publishDir "${params.outdir}/results/bwa_out_dd", mode: 'copy',
-               pattern: "*.${params.genome}.PE.dd.bam*"
-    
+              pattern: "*.${params.genome}.PE.dd.bam*"
+
     input:
-    tuple val(cell_id), path(sorted_bam)
-    
+    tuple val(cell_id), path(marked_bam), path(marked_bai)
+
     output:
     tuple val(cell_id), path("${cell_id}.${params.genome}.PE.dd.bam"),
           path("${cell_id}.${params.genome}.PE.dd.bam.bai"), emit: dedup_bam
-    
+    path "${cell_id}.dd_metrics.txt", emit: dedup_metrics
+
     script:
+    // Set optical duplicate parameters based on no_optical_duplicates flag
+    def optical_params = params.no_optical_duplicates ? 
+        "-READ_NAME_REGEX null" : 
+        "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance ?: 2500}"    
     """
     # Check if BAM has alignments
-    read_count=\$(samtools view -c ${sorted_bam})
+    read_count=\$(samtools view -c ${marked_bam})
     
     if [[ \$read_count -eq 0 ]]; then
         echo "No aligned reads, creating empty output"
-        cp ${sorted_bam} ${cell_id}.${params.genome}.PE.dd.bam
+        cp ${marked_bam} ${cell_id}.${params.genome}.PE.dd.bam
         samtools index ${cell_id}.${params.genome}.PE.dd.bam
+        echo -e "## No reads for duplicate marking\\nLIBRARY\\tUNPAIRED_READS_EXAMINED\\tREAD_PAIRS_EXAMINED\\tSECONDARY_OR_SUPPLEMENTARY_RDS\\tUNMAPPED_READS\\tUNPAIRED_READ_DUPLICATES\\tREAD_PAIR_DUPLICATES\\tREAD_PAIR_OPTICAL_DUPLICATES\\tPERCENT_DUPLICATION\\tESTIMATED_LIBRARY_SIZE\\n${cell_id}\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0" > ${cell_id}.dd_metrics.txt
     else
         picard MarkDuplicates \\
-            -INPUT ${sorted_bam} \\
+            -INPUT ${marked_bam} \\
             -OUTPUT ${cell_id}.${params.genome}.PE.dd.bam \\
             -METRICS_FILE ${cell_id}.dd_metrics.txt \\
             -REMOVE_DUPLICATES true \\
             -CREATE_INDEX true \\
             -VALIDATION_STRINGENCY LENIENT \\
             -ASSUME_SORT_ORDER coordinate \\
-            -OPTICAL_DUPLICATE_PIXEL_DISTANCE 2500
+            ${optical_params}
     fi
     """
 }
 
-process VALIDATE_BAM {
-    tag "${cell_id}"
-    
-    input:
-    tuple val(cell_id), path(bam_file)
-    
-    output:
-    tuple val(cell_id), path(bam_file), emit: validated_bam
-    
-    script:
-    """
-    # Quick validation
-    samtools quickcheck ${bam_file}
-    
-    # Check for duplicate read names
-    dup_count=\$(samtools view ${bam_file} | cut -f1 | sort | uniq -d | wc -l)
-    if [[ \$dup_count -gt 0 ]]; then
-        echo "WARNING: Found \$dup_count duplicate read names in ${cell_id}"
-    fi
-    
-    echo "BAM validation passed for ${cell_id}"
-    """
-}
-
-process BAM_QC_METRICS {
-    tag "${cell_id}"
-    publishDir "${params.outdir}/results/qc/bam_metrics", mode: 'copy'
-    
-    input:
-    tuple val(cell_id), path(marked_bam), path(marked_bai)
-    
-    output:
-    path "${cell_id}_alignment_metrics.txt", emit: alignment_metrics
-    path "${cell_id}_insert_metrics.txt", emit: insert_metrics
-    
-    script:
-    def ref_genome = params.genome_fasta[params.genome]
-    """
-    # Alignment summary metrics
-    picard CollectAlignmentSummaryMetrics \\
-        INPUT=${marked_bam} \\
-        OUTPUT=${cell_id}_alignment_metrics.txt \\
-        REFERENCE_SEQUENCE=${ref_genome}
-    
-    # Insert size metrics
-    picard CollectInsertSizeMetrics \\
-        INPUT=${marked_bam} \\
-        OUTPUT=${cell_id}_insert_metrics.txt \\
-        HISTOGRAM_FILE=${cell_id}_insert_histogram.pdf
-    """
-}
-
-process AGGREGATE_ALIGNMENT_METRICS {
-    publishDir "${params.outdir}/results/qc", mode: 'copy'
-    
-    input:
-    path alignment_files
-    path insert_files
-    
-    output:
-    path "alignment_summary.tsv"
-    path "insert_size_summary.tsv"
-    
-    script:
-    """
-    # Aggregate alignment metrics
-    echo -e "sample_id\\ttotal_reads\\taligned_reads\\talignment_rate" > alignment_summary.tsv
-    for file in ${alignment_files}; do
-        sample=\$(basename "\$file" _alignment_metrics.txt | sed -e 's/_IGO_.*//')
-        total=\$(grep -A1 "FIRST_OF_PAIR" "\$file" | tail -1 | cut -f2)
-        aligned=\$(grep -A1 "FIRST_OF_PAIR" "\$file" | tail -1 | cut -f6)
-        rate=\$(grep -A1 "FIRST_OF_PAIR" "\$file" | tail -1 | cut -f7)
-        echo -e "\$sample\\t\$total\\t\$aligned\\t\$rate" >> alignment_summary.tsv
-    done
-    
-    # Aggregate insert size metrics
-    echo -e "sample_id\\tmean_insert_size\\tmedian_insert_size\\tstd_dev" > insert_size_summary.tsv
-    for file in ${insert_files}; do
-        sample=\$(basename "\$file" _insert_metrics.txt | sed -e 's/_IGO_.*//')
-        mean=\$(grep -A1 "MEDIAN_INSERT_SIZE" "\$file" | tail -1 | cut -f1)
-        median=\$(grep -A1 "MEDIAN_INSERT_SIZE" "\$file" | tail -1 | cut -f1)
-        std=\$(grep -A1 "MEDIAN_INSERT_SIZE" "\$file" | tail -1 | cut -f2)
-        echo -e "\$sample\\t\$mean\\t\$median\\t\$std" >> insert_size_summary.tsv
-    done
-    """
-}
-
+// Quality Filter, and Mate Clipping
 process FILTER_AND_EXTRACT_READS {
     tag "${cell_id}"
     publishDir "${params.outdir}/results/${output_dir}", mode: 'copy',
@@ -258,3 +186,30 @@ process FILTER_AND_EXTRACT_READS {
     samtools index ${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam
     """
 }
+
+
+// Utilities
+process VALIDATE_BAM {
+    tag "${cell_id}"
+    
+    input:
+    tuple val(cell_id), path(bam_file)
+    
+    output:
+    tuple val(cell_id), path(bam_file), emit: validated_bam
+    
+    script:
+    """
+    # Quick validation
+    samtools quickcheck ${bam_file}
+    
+    # Check for duplicate read names
+    dup_count=\$(samtools view ${bam_file} | cut -f1 | sort | uniq -d | wc -l)
+    if [[ \$dup_count -gt 0 ]]; then
+        echo "WARNING: Found \$dup_count duplicate read names in ${cell_id}"
+    fi
+    
+    echo "BAM validation passed for ${cell_id}"
+    """
+}
+

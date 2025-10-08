@@ -36,12 +36,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PIPELINE_DIR="$SCRIPT_DIR"
 
 # Determine project directory (parent of nf_cnv)
-PROJECT_DIR="$(dirname "$PIPELINE_DIR")"
+PROJECT_DIR="$(basename $(dirname "$PIPELINE_DIR"))"
 echo -e "${BLUE}Pipeline directory:${NC} $PIPELINE_DIR"
 echo -e "${BLUE}Project directory:${NC} $PROJECT_DIR"
 
 # Extract project name from directory
-PROJECT_NAME=$(basename "$PROJECT_DIR")
+PROJECT_NAME=$(dirname "$PROJECT_DIR")
 echo -e "\n${PURPLE}Project Information:${NC}"
 read -p "Enter project name (default: $PROJECT_NAME): " PROJECT_NAME_INPUT
 if [ -n "$PROJECT_NAME_INPUT" ]; then
@@ -154,8 +154,8 @@ SPLIT_MEM=${SPLIT_MEM:-8}
 
 # Barcode Configuration
 echo -e "\n${PURPLE}Barcode Configuration:${NC}"
-read -p "Barcode file path (default: \${projectDir}/nf_cnv/assets/barcode.192.txt): " BARCODE_FILE
-BARCODE_FILE=${BARCODE_FILE:-"\${projectDir}/nf_cnv/assets/barcode.192.txt"}
+read -p "Barcode file path (default: \${launchDir}/nf_cnv/assets/barcode.192.txt): " BARCODE_FILE
+BARCODE_FILE=${BARCODE_FILE:-"\${launchDir}/nf_cnv/assets/barcode.192.txt"}
 
 read -p "Maximum barcode mismatches allowed (default: 1): " BARCODE_MISMATCHES
 BARCODE_MISMATCHES=${BARCODE_MISMATCHES:-1}
