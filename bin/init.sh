@@ -12,8 +12,14 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Put colors into an array (exclude NC)
+COLORS=("$RED" "$GREEN" "$BLUE" "$YELLOW" "$PURPLE" "$CYAN")
+
+# Pick a random color from the array
+RANDOM_COLOR=${COLORS[$RANDOM % ${#COLORS[@]}]}
+
 # ASCII art banner
-echo -e "${CYAN}"
+echo -e "${RANDOM_COLOR}"
 cat << "EOF"
  ███▄    █   █████▒      ▄████▄   ███▄    █ ██▒   █▓
  ██ ▀█   █ ▓██   ▒      ▒██▀ ▀█   ██ ▀█   █▓██░   █▒
@@ -32,16 +38,16 @@ echo -e "${GREEN}Single Cell CNV Pipeline Project Setup${NC}"
 echo -e "${GREEN}============================================${NC}"
 
 # Get the directory where init.sh is located (should be nf_cnv/)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PIPELINE_DIR="$SCRIPT_DIR"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PIPELINE_DIR=$(dirname $SCRIPT_DIR)
 
 # Determine project directory (parent of nf_cnv)
-PROJECT_DIR="$(basename $(dirname "$PIPELINE_DIR"))"
+PROJECT_DIR=$(dirname $(dirname $SCRIPT_DIR))
 echo -e "${BLUE}Pipeline directory:${NC} $PIPELINE_DIR"
 echo -e "${BLUE}Project directory:${NC} $PROJECT_DIR"
 
 # Extract project name from directory
-PROJECT_NAME=$(dirname "$PROJECT_DIR")
+PROJECT_NAME=$(basename $PROJECT_DIR)
 echo -e "\n${PURPLE}Project Information:${NC}"
 read -p "Enter project name (default: $PROJECT_NAME): " PROJECT_NAME_INPUT
 if [ -n "$PROJECT_NAME_INPUT" ]; then
@@ -71,12 +77,9 @@ fi
 
 # Create necessary directories
 CONFIG_DIR="$PROJECT_DIR/config"
-RESULTS_DIR="$PROJECT_DIR/results"
-LOGS_DIR="$PROJECT_DIR/logs"
-DOCS_DIR="$PROJECT_DIR/docs"
 
 echo -e "\n${BLUE}Creating project structure...${NC}"
-mkdir -p "$CONFIG_DIR" "$RESULTS_DIR" "$LOGS_DIR" "$DOCS_DIR"
+mkdir -p "$CONFIG_DIR"
 
 # Function to extract sample IDs from FASTQ files
 function find_sample_ids() {
@@ -126,11 +129,11 @@ function find_sample_ids() {
 
 # Gather SLURM configuration details
 echo -e "\n${PURPLE}SLURM Configuration:${NC}"
-read -p "SLURM account name (default: your_account): " SLURM_ACCOUNT
-SLURM_ACCOUNT=${SLURM_ACCOUNT:-your_account}
+read -p "SLURM account name (default: singers): " SLURM_ACCOUNT
+SLURM_ACCOUNT=${SLURM_ACCOUNT:-singers}
 
-read -p "SLURM queue/partition (default: standard): " SLURM_QUEUE
-SLURM_QUEUE=${SLURM_QUEUE:-standard}
+read -p "SLURM queue/partition (default: cpu): " SLURM_QUEUE
+SLURM_QUEUE=${SLURM_QUEUE:-cpu}
 
 read -p "Maximum concurrent jobs (default: 50): " MAX_JOBS
 MAX_JOBS=${MAX_JOBS:-50}
@@ -186,52 +189,38 @@ cat > "$CONFIG_DIR/nextflow.config" << EOL
  */
 
 // Include base configurations
-includeConfig "\${projectDir}/nf_cnv/conf/base.config"
-includeConfig "\${projectDir}/nf_cnv/conf/slurm.config"
+includeConfig "\${launchDir}/nf_cnv/conf/base.config"
+includeConfig "\${launchDir}/nf_cnv/conf/slurm.config"
 
 params {
-    // ================================
     // Project Information
-    // ================================
     project = "$PROJECT_NAME"
     description = "$PROJECT_DESCRIPTION"
     
-    // ================================
     // Input/Output Directories
-    // ================================
-    seqdata = "\${projectDir}/seqdata"
-    outdir = "\${projectDir}/results"
+    seqdata = "\${launchDir}/seqdata"
+    outdir = "\${launchDir}/results"
     
-    // ================================
     // Sample Configuration
-    // ================================
-    sampleSheet = "\${projectDir}/config/samples.csv"
+    sampleSheet = "\${launchDir}/config/samples.csv"
     
-    // ================================
     // Barcode Parameters
-    // ================================
     barcode_file = "$BARCODE_FILE"
     barcode_max_mismatches = $BARCODE_MISMATCHES
     barcode_search_len = $BARCODE_SEARCH_LEN
     barcode_rc = $BARCODE_RC
     barcode_trim = $BARCODE_TRIM
     
-    // ================================
     // Quality Control
-    // ================================
     min_reads_per_cell = 1000
     max_cells_per_sample = 10000
     
-    // ================================
     // Output Options
-    // ================================
     publish_dir_mode = 'copy'
     save_intermediate = false
 }
 
-// ================================
 // Process Configuration
-// ================================
 process {
     executor = 'slurm'
     queue = '$SLURM_QUEUE'
@@ -261,9 +250,7 @@ process {
     }
 }
 
-// ================================
 // Executor Configuration
-// ================================
 executor {
     \$slurm {
         queueSize = $MAX_JOBS
@@ -272,9 +259,7 @@ executor {
     }
 }
 
-// ================================
 // Reporting Configuration
-// ================================
 report {
     enabled = true
     file = "\${params.outdir}/../logs/reports/nextflow_report.html"
@@ -299,9 +284,7 @@ trace {
     overwrite = true
 }
 
-// ================================
 // Manifest
-// ================================
 manifest {
     name = '$PROJECT_NAME'
     description = '$PROJECT_DESCRIPTION'
@@ -370,15 +353,6 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${GREEN}Starting PROJECT_NAME_PLACEHOLDER pipeline...${NC}"
-echo -e "${BLUE}Timestamp: $(date)${NC}"
-echo -e "${BLUE}Working directory: $(pwd)${NC}"
-
-# Check if running in SLURM environment
-if [ -n "$SLURM_JOB_ID" ]; then
-    echo -e "${BLUE}SLURM Job ID: $SLURM_JOB_ID${NC}"
-    echo -e "${BLUE}SLURM Node: $SLURMD_NODENAME${NC}"
-fi
 
 # Load required modules
 echo -e "${YELLOW}Loading modules...${NC}"
@@ -397,61 +371,13 @@ if [ ! -f "config/nextflow.config" ]; then
     exit 1
 fi
 
-if [ ! -f "config/samples.csv" ]; then
-    echo -e "${RED}Error: config/samples.csv not found${NC}"
-    echo -e "${YELLOW}Please run: nf_cnv/init.sh${NC}"
-    exit 1
-fi
-
-# Create reports directory
-mkdir -p logs/reports
-
-# Parse command line arguments
-RESUME=""
-DRY_RUN=""
-PROFILE=""
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -resume|--resume)
-            RESUME="-resume"
-            echo -e "${YELLOW}Resume mode enabled${NC}"
-            shift
-            ;;
-        -dry-run|--dry-run)
-            DRY_RUN="-dry-run"
-            echo -e "${YELLOW}Dry run mode enabled${NC}"
-            shift
-            ;;
-        -profile|--profile)
-            PROFILE="-profile $2"
-            echo -e "${YELLOW}Using profile: $2${NC}"
-            shift 2
-            ;;
-        *)
-            echo -e "${YELLOW}Unknown option: $1${NC}"
-            shift
-            ;;
-    esac
-done
-
 # Run the pipeline
-echo -e "${GREEN}Executing pipeline...${NC}"
-echo -e "${BLUE}Command: nextflow run nf_cnv/main.nf -c config/nextflow.config $RESUME $DRY_RUN $PROFILE${NC}"
+nextflow run nf_cnv/main.nf -c config/nextflow.config -resume "$@"
 
-nextflow run nf_cnv/main.nf \
-    -c config/nextflow.config \
-    $RESUME \
-    $DRY_RUN \
-    $PROFILE
 
 # Check exit status
 EXIT_CODE=$?
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}Pipeline completed successfully!${NC}"
-    echo -e "${BLUE}Check results in: results/${NC}"
-    echo -e "${BLUE}Check reports in: logs/reports/${NC}"
-else
+if [ $EXIT_CODE -ne 0 ]; then
     echo -e "${RED}Pipeline failed with exit code: $EXIT_CODE${NC}"
     echo -e "${YELLOW}Check logs in: logs/${NC}"
 fi
@@ -487,12 +413,16 @@ cat > "$PROJECT_DIR/README.md" << EOL
 $PROJECT_NAME/
 ├── config/                    # Configuration files
 │   ├── nextflow.config        # Main pipeline configuration
-│   └─ samples.csv            # Sample metadata
+│   └─ samples.csv             # Sample metadata
 ├── seqdata/                   # Raw sequencing data (FASTQ files)
 ├── results/                   # Pipeline outputs
 │   ├── merged/                # Concatenated FASTQ files
 │   ├── wsplit/                # Barcode-split cell files
-│   └── stats/                 # QC statistics and reports
+│   ├── bam_out_md/            # Bam File with marked duplicates
+│   ├── bam_out_dd/            # Deduplicated bam file
+│   ├── bam_out_{fw|rv}        # Mate-Clipped Bam file fw:forward read, rv:reverse read
+│   ├── wsplit/                # Barcode-split cell files
+│   └── qc/                    # QC statistics and reports
 ├── logs/                      # Execution logs and reports
 │   ├── reports/               # Nextflow HTML reports
 │   └── pipeline-*.log         # SLURM job logs
@@ -518,12 +448,12 @@ The nf-cnv pipeline performs the following steps:
 
 Edit the sample sheet to match your data:
 \`\`\`bash
-nano config/samples.csv
+emacs -nw config/samples.csv
 \`\`\`
 
 Review pipeline parameters:
 \`\`\`bash
-nano config/nextflow.config
+emacs -nw config/nextflow.config
 \`\`\`
 
 ### 2. Run the Pipeline
@@ -667,18 +597,6 @@ directories:
   results: "$RESULTS_DIR"
   logs: "$LOGS_DIR"
 
-slurm:
-  account: "$SLURM_ACCOUNT"
-  queue: "$SLURM_QUEUE"
-  max_jobs: $MAX_JOBS
-  submit_rate: "$SUBMIT_RATE"
-
-resources:
-  concat_cpus: $CONCAT_CPUS
-  concat_memory: "${CONCAT_MEM}G"
-  split_cpus: $SPLIT_CPUS
-  split_memory: "${SPLIT_MEM}G"
-
 barcodes:
   file: "$BARCODE_FILE"
   max_mismatches: $BARCODE_MISMATCHES
@@ -753,10 +671,6 @@ sinfo -N -l
 EOL
 
 echo -e "${GREEN}✓ Created quick reference at $PROJECT_DIR/QUICK_REFERENCE.md${NC}"
-
-# Create reports directory structure
-## mkdir -p "$LOGS_DIR/reports"
-## mkdir -p "$RESULTS_DIR"/{merged,wsplit,qc}
 
 # Create .gitignore
 cat > "$PROJECT_DIR/.gitignore" << EOL

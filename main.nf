@@ -9,11 +9,23 @@ include { CHECK_FASTQ_PAIRS; AGGREGATE_FASTQ_CHECKS; BARCODE_SPLIT;
 	 CHECK_CELL_FASTQ_PAIRS; AGGREGATE_CELL_CHECKS; AGGREGATE_BARCODE_STATS } from './modules/demultiplexing'
 // QC Imports
 include { FASTQC } from './modules/nf-core/fastqc/main'
+include { FASTQSCREEN_FASTQSCREEN } from './modules/nf-core/fastqscreen/fastqscreen/main'
+// include { FASTQ_SCREEN ; AGGREGATE_FASTQ_SCREEN } from './modules/qc' // (non nf-core option)
 
 // Read Alignment
 include { BWA_MEM; COLLATE_BAM; FIXMATE_BAM; SORT_BAM; MARK_DUPLICATES;
 	 REMOVE_DUPLICATES; FILTER_AND_EXTRACT_READS; VALIDATE_BAM } from './modules/alignment'
-	 
+
+// VARBIN
+include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_RESULTS } from './modules/varbin'
+	
+// BAM QC 
+include { QUALIMAP_BAMQC } from './modules/nf-core/qualimap/bamqc/main'
+include { PICARD_COLLECTMULTIPLEMETRICS } from './modules/nf-core/picard/collectmultiplemetrics/main'
+include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/collectinsertsizemetrics/main'
+include { SAMTOOLS_FLAGSTAT } from './modules/nf-core/samtools/flagstat/main'
+include { SAMTOOLS_STATS } from './modules/nf-core/samtools/stats/main'
+include { SAMTOOLS_IDXSTATS } from './modules/nf-core/samtools/idxstats/main'
 
 
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -47,6 +59,18 @@ EOF
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // Main workflow
 workflow {
+    log.info " ███▄    █   █████▒      ▄████▄   ███▄    █ ██▒   █▓ "
+    log.info " ██ ▀█   █ ▓██   ▒      ▒██▀ ▀█   ██ ▀█   █▓██░   █▒ "
+    log.info "▓██  ▀█ ██▒▒████ ░      ▒▓█    ▄ ▓██  ▀█ ██▒▓██  █▒░ "
+    log.info "▓██▒  ▐▌██▒░▓█▒  ░      ▒▓▓▄ ▄██▒▓██▒  ▐▌██▒ ▒██ █░░ "
+    log.info "▒██░   ▓██░░▒█░         ▒ ▓███▀ ░▒██░   ▓██░  ▒▀█░   "
+    log.info "░ ▒░   ▒ ▒  ▒ ░         ░ ░▒ ▒  ░░ ▒░   ▒ ▒   ░ ▐░   "
+    log.info "░ ░░   ░ ▒░ ░             ░  ▒   ░ ░░   ░ ▒░  ░ ░░   "
+    log.info "   ░   ░ ░  ░ ░         ░           ░   ░ ░     ░░   "
+    log.info "         ░              ░ ░               ░      ░   "
+    log.info "                        ░                      ░     "
+    log.info "."
+    log.info "."
     log.info "SC-CNV Processing Pipeline"
     log.info "Using genome: ${params.genome}"
     
@@ -128,7 +152,7 @@ workflow {
     AGGREGATE_CELL_CHECKS(CHECK_CELL_FASTQ_PAIRS.out.collect())
     AGGREGATE_BARCODE_STATS(BARCODE_SPLIT.out.stats.map { it[2] }.collect())
     
-    log.info "Pipeline completed: ${samples.size()} samples, ${barcodes.size()} barcodes per sample"
+    log.info "Demultiplexing complete: ${samples.size()} samples, ${barcodes.size()} barcodes per sample"
 
     // STEP 5: CELL-LEVEL QUALITY CONTROL
     // Run FastQC on demultiplexed cell FASTQ files
@@ -137,9 +161,25 @@ workflow {
     }
     FASTQC(cell_fastq_for_qc)
     
-    log.info "FastQC analysis completed on demultiplexed cells"
-    
+    log.info "FastQC completed on demultiplexed cells"
 
+    // FastQ Screen QC (on demultiplexted FASTQs)
+    if (params.run_fastq_screen) {
+	// Prepare input channel from split cell fastqs
+	cell_fastqs_for_screen = BARCODE_SPLIT.out.cell_fastqs
+            .map { cell_id, r1, r2 -> [[id: cell_id, single_end: false], [r1, r2]] }
+	
+	// Create empty database channel if no config provided
+	fastq_screen_db = params.fastq_screen_config ? 
+            Channel.fromPath(params.fastq_screen_config) : 
+            Channel.empty()
+	
+	FASTQSCREEN_FASTQSCREEN(
+            cell_fastqs_for_screen,
+            fastq_screen_db
+	)
+    }
+    
     // STEP 6: SEQUENCE ALIGNMENT
     // Run BWA-MEM alignment on cell FASTQ files
     alignment_input = BARCODE_SPLIT.out.cell_fastqs
@@ -165,6 +205,69 @@ workflow {
     FILTER_AND_EXTRACT_READS(REMOVE_DUPLICATES.out.dedup_bam)
     
     log.info "Post-alignment filtering complete: extracted ${strand_suffix} reads for single-end analysis"
+
+    // BAM Quality Control - CORRECTED VERSION
+    if (params.run_bam_qc) {
+	// Use deduplicated BAMs for QC
+	qc_bams = REMOVE_DUPLICATES.out.dedup_bam
+	
+	// QualiMap BAM QC
+	QUALIMAP_BAMQC(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
+            []  // No GFF file
+	)
+	
+	// Picard metrics
+	PICARD_COLLECTMULTIPLEMETRICS(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
+            [], // No reference fasta needed for basic metrics
+            []  // No reference dict needed
+	)
+	
+	PICARD_COLLECTINSERTSIZEMETRICS(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] }
+	)
+	
+	// Samtools metrics
+	SAMTOOLS_FLAGSTAT(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam, bai] }
+	)
+	
+	SAMTOOLS_STATS(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
+            [] // No reference fasta
+	)
+	
+	SAMTOOLS_IDXSTATS(
+            qc_bams.map { cell_id, bam, bai -> [cell_id, bam, bai] }
+	)
+    }
+    
+    // Varbin CNV workflow
+    if (params.run_cnv_analysis &&
+	params.genome in params.varbin_supported_genomes) {
+
+	// Varbin CNV
+	// Create resolution channel
+	resolution_ch = Channel.from(params.cnv_resolutions)
+	
+	// Combine strand BAMs with resolutions
+	cnv_input_ch = FILTER_AND_EXTRACT_READS.out.strand_bam
+            .combine(resolution_ch)
+	
+	// Run bin counting
+	GET_BIN_COUNTS(cnv_input_ch)
+	
+	// Run CNV profiling
+	CNV_PROFILE(GET_BIN_COUNTS.out.bin_counts)
+    
+	// Aggregate results across all cells and resolutions
+	all_ploidy_results = CNV_PROFILE.out.ploidy_results
+            .map { cell_id, resolution, ploidy_file -> ploidy_file }
+            .collect()
+    
+	AGGREGATE_CNV_RESULTS(all_ploidy_results)
+    }
     
 }
 

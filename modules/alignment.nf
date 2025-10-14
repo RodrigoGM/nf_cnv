@@ -114,6 +114,8 @@ process MARK_DUPLICATES {
             -VALIDATION_STRINGENCY LENIENT \\
             -ASSUME_SORT_ORDER coordinate \\
             ${optical_params}
+
+    mv ${cell_id}.${params.genome}.PE.md.bai  ${cell_id}.${params.genome}.PE.md.bam.bai
     fi
     """
 }
@@ -133,10 +135,10 @@ process REMOVE_DUPLICATES {
     path "${cell_id}.dd_metrics.txt", emit: dedup_metrics
 
     script:
-    // Set optical duplicate parameters based on no_optical_duplicates flag
-    def optical_params = params.no_optical_duplicates ? 
-        "-READ_NAME_REGEX null" : 
-        "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance ?: 2500}"    
+    def optical_params = params.no_optical_duplicates ?
+        "-READ_NAME_REGEX null" :
+        "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance ?: 2500}"
+    
     """
     # Check if BAM has alignments
     read_count=\$(samtools view -c ${marked_bam})
@@ -145,7 +147,7 @@ process REMOVE_DUPLICATES {
         echo "No aligned reads, creating empty output"
         cp ${marked_bam} ${cell_id}.${params.genome}.PE.dd.bam
         samtools index ${cell_id}.${params.genome}.PE.dd.bam
-        echo -e "## No reads for duplicate marking\\nLIBRARY\\tUNPAIRED_READS_EXAMINED\\tREAD_PAIRS_EXAMINED\\tSECONDARY_OR_SUPPLEMENTARY_RDS\\tUNMAPPED_READS\\tUNPAIRED_READ_DUPLICATES\\tREAD_PAIR_DUPLICATES\\tREAD_PAIR_OPTICAL_DUPLICATES\\tPERCENT_DUPLICATION\\tESTIMATED_LIBRARY_SIZE\\n${cell_id}\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0" > ${cell_id}.dd_metrics.txt
+        echo -e "## No reads for duplicate removal\\nLIBRARY\\tUNPAIRED_READS_EXAMINED\\tREAD_PAIRS_EXAMINED\\tSECONDARY_OR_SUPPLEMENTARY_RDS\\tUNMAPPED_READS\\tUNPAIRED_READ_DUPLICATES\\tREAD_PAIR_DUPLICATES\\tREAD_PAIR_OPTICAL_DUPLICATES\\tPERCENT_DUPLICATION\\tESTIMATED_LIBRARY_SIZE\\n${cell_id}\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0" > ${cell_id}.dd_metrics.txt
     else
         picard MarkDuplicates \\
             -INPUT ${marked_bam} \\
@@ -156,6 +158,7 @@ process REMOVE_DUPLICATES {
             -VALIDATION_STRINGENCY LENIENT \\
             -ASSUME_SORT_ORDER coordinate \\
             ${optical_params}
+    mv ${cell_id}.${params.genome}.PE.dd.bai ${cell_id}.${params.genome}.PE.dd.bam.bai
     fi
     """
 }
@@ -163,20 +166,22 @@ process REMOVE_DUPLICATES {
 // Quality Filter, and Mate Clipping
 process FILTER_AND_EXTRACT_READS {
     tag "${cell_id}"
-    publishDir "${params.outdir}/results/${output_dir}", mode: 'copy',
+    publishDir "${params.outdir}/results/${params.use_reverse_reads ? 'bwa_out_rv' : 'bwa_out_fw'}",
+	       mode: 'copy',
                pattern: "*.${params.genome}.PE_*.dd.bam*"
-    
+
     input:
     tuple val(cell_id), path(dedup_bam), path(dedup_bai)
-    
+
     output:
-    tuple val(cell_id), path("${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam"),
-          path("${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam.bai"), emit: strand_bam
-    
+    tuple val(cell_id), path("${cell_id}.${params.genome}.PE_*.dd.bam"),
+          path("${cell_id}.${params.genome}.PE_*.dd.bam.bai"), emit: strand_bam
+
     script:
+    // Define variables at script level so they're available for output declarations
     def strand_flag = params.use_reverse_reads ? '0x80' : '0x40'
     def strand_suffix = params.use_reverse_reads ? 'RV' : 'FW'
-    def output_dir = params.use_reverse_reads ? 'bwa_out_rv' : 'bwa_out_fw'
+    
     """
     # Filter unique reads and extract strand in one step
     samtools view -@ ${task.cpus} -q 30 -F 0x800 -f ${strand_flag} -h -b \\
@@ -186,7 +191,6 @@ process FILTER_AND_EXTRACT_READS {
     samtools index ${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam
     """
 }
-
 
 // Utilities
 process VALIDATE_BAM {
