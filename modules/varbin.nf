@@ -33,18 +33,18 @@ process GET_BIN_COUNTS {
 process CNV_PROFILE {
     tag "${cell_id}_${resolution}k"
     publishDir "${params.outdir}/results/varbin${resolution}k", mode: 'copy',
-               pattern: "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa.*"
+        pattern: "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa*"
 
     input:
     tuple val(cell_id), val(resolution), path(bin_counts), path(bin_stats)
 
     output:
-    tuple val(cell_id), val(resolution), 
-          path("${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa.quantal.ploidy.txt"), emit: ploidy_results
-    path "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa.quantal.log", emit: log_files
-    path "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa_seg.txt", emit: seg_files
-    path "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa_short_seg.txt", emit: short_seg_files
-    path "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa*", emit: all_results
+    tuple val(cell_id), val(resolution),
+          path("${cell_id}.${params.genome}.PE_*.${resolution}k.bwa.quantal.ploidy.txt"), emit: ploidy_results
+    path "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa.quantal.log", emit: log_files
+    path "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa_seg.txt", emit: seg_files
+    path "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa_short_seg.txt", emit: short_seg_files
+    path "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa*", emit: all_results
 
     script:
     def genome_map = [hsa37: 'hg19', hsa38: 'hg38']
@@ -73,7 +73,7 @@ process CNV_PROFILE {
     """
 }
 
-process AGGREGATE_CNV_RESULTS {
+process AGGREGATE_CNV_PLOIDY {
     tag "all_samples"
     publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'
 
@@ -81,57 +81,68 @@ process AGGREGATE_CNV_RESULTS {
     path ploidy_files
 
     output:
-    path "combined_ploidy_results.txt", emit: combined_results
-    path "*_resolution_summary.txt", emit: resolution_summaries
+    path "ploidy_results_combined.tsv", emit: combined_results
+    path "ploidy_results_*.tsv", emit: resolution_results
 
     script:
     """
     # Create combined results file
-    echo -e "cellID\\tresolution\\tploidy\\terror\\tgenome\\tstrand" > combined_ploidy_results.txt
+    echo -e "cellID\\tploidy\\terror\\tresolution\\tgenome\\tread" > ploidy_results_combined.tmp
     
     # Process each ploidy file
     for file in ${ploidy_files}; do
-        if [[ \$file == *"5k"* ]]; then
+        # Extract resolution from filename (format: ...5k.bwa.quantal.ploidy.txt)
+        if [[ \$file == *".5k.bwa.quantal.ploidy.txt" ]]; then
             resolution="5k"
-        elif [[ \$file == *"20k"* ]]; then
+        elif [[ \$file == *".20k.bwa.quantal.ploidy.txt" ]]; then
             resolution="20k"
-        elif [[ \$file == *"50k"* ]]; then
+        elif [[ \$file == *".50k.bwa.quantal.ploidy.txt" ]]; then
             resolution="50k"
         else
             resolution="unknown"
         fi
         
-        strand="${params.use_reverse_reads ? 'RV' : 'FW'}"
+        # Extract read type (FW/RV) from filename
+        if [[ \$file == *"PE_FW"* ]]; then
+            read_type="FW"
+        elif [[ \$file == *"PE_RV"* ]]; then
+            read_type="RV"
+        else
+            read_type="unknown"
+        fi
         
-        # Skip header and add resolution info
-        tail -n +2 \$file | while read line; do
-            echo -e "\${line}\\t\${resolution}\\t${params.genome}\\t\${strand}" >> combined_ploidy_results.txt
-        done
+        # Skip header and add resolution/genome/read info
+        if [[ -f \$file ]]; then
+            tail -n +2 \$file | while IFS='\\t' read -r cellID ploidy error; do
+                if [[ -n "\$cellID" ]]; then
+                    echo -e "\${cellID}\\t\${ploidy}\\t\${error}\\t\${resolution}\\t${params.genome}\\t\${read_type}" >> ploidy_results_combined.tmp
+                fi
+            done
+        fi
     done
     
-    # Create resolution-specific summaries
-    for res in 5k 20k 50k; do
-        echo "Summary for \${res} resolution:" > \${res}_resolution_summary.txt
-        echo "=========================" >> \${res}_resolution_summary.txt
-        
-        grep "\t\${res}\t" combined_ploidy_results.txt | \\
-        awk -F'\\t' 'NR>1 {
-            if(\$3 != "NA") {
-                sum += \$3; count++; 
-                if(\$3 < min || min=="") min = \$3;
-                if(\$3 > max || max=="") max = \$3;
-            }
-        } 
-        END {
-            if(count > 0) {
-                print "Cells processed: " count
-                print "Mean ploidy: " sum/count
-                print "Min ploidy: " min
-                print "Max ploidy: " max
-            } else {
-                print "No valid ploidy estimates found"
-            }
-        }' >> \${res}_resolution_summary.txt
-    done
+    cat ploidy_results_combined.tmp | tr "\t" ' ' | sed -E 's/ +/ /g' | tr ' ' "\t" > ploidy_results_combined.tsv
+    
+    """
+}
+
+process CNV_PLOIDY_SUMMARY {
+    tag "summary_stats"
+    publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'
+
+    input:
+    path combined_results
+
+    output:
+    path "ploidy_summary_all.tsv", emit: ploidy_stats
+
+    script:
+    """
+    # Run summary statistics with grouping by resolution
+    ${projectDir}/bin/cnv_ploidy_summary.py \\
+        -i ${combined_results} \\
+        -o ploidy_summary_all.tsv \\
+        --group-by resolution
+  
     """
 }

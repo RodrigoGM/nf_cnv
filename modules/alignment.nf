@@ -186,7 +186,7 @@ process FILTER_AND_EXTRACT_READS {
     # Filter unique reads and extract strand in one step
     samtools view -@ ${task.cpus} -q 30 -F 0x800 -f ${strand_flag} -h -b \\
         -o ${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam \\
-        ${dedup_bam}
+        ${dedup_bam} ${params.primary_chromosomes}
     
     samtools index ${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam
     """

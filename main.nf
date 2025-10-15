@@ -9,15 +9,14 @@ include { CHECK_FASTQ_PAIRS; AGGREGATE_FASTQ_CHECKS; BARCODE_SPLIT;
 	 CHECK_CELL_FASTQ_PAIRS; AGGREGATE_CELL_CHECKS; AGGREGATE_BARCODE_STATS } from './modules/demultiplexing'
 // QC Imports
 include { FASTQC } from './modules/nf-core/fastqc/main'
-include { FASTQSCREEN_FASTQSCREEN } from './modules/nf-core/fastqscreen/fastqscreen/main'
-// include { FASTQ_SCREEN ; AGGREGATE_FASTQ_SCREEN } from './modules/qc' // (non nf-core option)
+include { FASTQ_SCREEN } from './modules/qc' // (non nf-core option)
 
 // Read Alignment
 include { BWA_MEM; COLLATE_BAM; FIXMATE_BAM; SORT_BAM; MARK_DUPLICATES;
 	 REMOVE_DUPLICATES; FILTER_AND_EXTRACT_READS; VALIDATE_BAM } from './modules/alignment'
 
 // VARBIN
-include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_RESULTS } from './modules/varbin'
+include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_PLOIDY; CNV_PLOIDY_SUMMARY } from './modules/varbin'
 	
 // BAM QC 
 include { QUALIMAP_BAMQC } from './modules/nf-core/qualimap/bamqc/main'
@@ -166,18 +165,19 @@ workflow {
     // FastQ Screen QC (on demultiplexted FASTQs)
     if (params.run_fastq_screen) {
 	// Prepare input channel from split cell fastqs
-	cell_fastqs_for_screen = BARCODE_SPLIT.out.cell_fastqs
-            .map { cell_id, r1, r2 -> [[id: cell_id, single_end: false], [r1, r2]] }
+	fastq_screen_input = BARCODE_SPLIT.out.cell_fastqs
+    
+	// Run FastQ Screen on each cell
+	FASTQ_SCREEN(fastq_screen_input)
+    
+	// Aggregate all screen results
+	all_screen_files = FASTQ_SCREEN.out.screen_results
+            .map { cell_id, txt_file, html_file -> txt_file }
+            .collect()
 	
-	// Create empty database channel if no config provided
-	fastq_screen_db = params.fastq_screen_config ? 
-            Channel.fromPath(params.fastq_screen_config) : 
-            Channel.empty()
-	
-	FASTQSCREEN_FASTQSCREEN(
-            cell_fastqs_for_screen,
-            fastq_screen_db
-	)
+	// AGGREGATE_FASTQ_SCREEN(all_screen_files) // handled by multiqc
+    
+	log.info "Custom FastQ Screen run completed"
     }
     
     // STEP 6: SEQUENCE ALIGNMENT
@@ -206,44 +206,58 @@ workflow {
     
     log.info "Post-alignment filtering complete: extracted ${strand_suffix} reads for single-end analysis"
 
-    // BAM Quality Control - CORRECTED VERSION
+    // STEP 8. BAM Quality Control - CORRECTED VERSION
     if (params.run_bam_qc) {
 	// Use deduplicated BAMs for QC
 	qc_bams = REMOVE_DUPLICATES.out.dedup_bam
-	
-	// QualiMap BAM QC
+
+	// QualiMap BAM QC: expects [meta, bam], gff
+	qualimap_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam]
+	}
 	QUALIMAP_BAMQC(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
-            []  // No GFF file
+            qualimap_input,
+            Channel.empty()  // No GFF file
 	)
 	
-	// Picard metrics
+	// Picard CollectMultipleMetrics: expects [meta, bam, bai], [meta2, fasta], [meta3, fai]
+	picard_multi_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam, bai]
+	}
 	PICARD_COLLECTMULTIPLEMETRICS(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
-            [], // No reference fasta needed for basic metrics
-            []  // No reference dict needed
+            picard_multi_input,
+            Channel.empty(), // No reference fasta tuple
+            Channel.empty()  // No reference fasta index tuple
 	)
 	
-	PICARD_COLLECTINSERTSIZEMETRICS(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] }
-	)
+	// Picard CollectInsertSizeMetrics: expects [meta, bam]
+	picard_insert_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam]
+	}
+	PICARD_COLLECTINSERTSIZEMETRICS(picard_insert_input)
 	
-	// Samtools metrics
-	SAMTOOLS_FLAGSTAT(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam, bai] }
-	)
+	// Samtools flagstat: expects [meta, bam, bai]
+	flagstat_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam, bai]
+	}
+	SAMTOOLS_FLAGSTAT(flagstat_input)
 	
+	// Samtools stats: expects [meta, input, input_index], [meta2, fasta]
+	stats_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam, bai]
+	}
 	SAMTOOLS_STATS(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam] },
-            [] // No reference fasta
+            stats_input,
+            Channel.empty() // No reference fasta tuple
 	)
 	
-	SAMTOOLS_IDXSTATS(
-            qc_bams.map { cell_id, bam, bai -> [cell_id, bam, bai] }
-	)
-    }
-    
-    // Varbin CNV workflow
+	// Samtools idxstats: expects [meta, bam, bai]
+	idxstats_input = qc_bams.map { cell_id, bam, bai -> 
+            [[id: cell_id, single_end: false], bam, bai]
+	}
+	SAMTOOLS_IDXSTATS(idxstats_input)
+    }    
+    // STEP 9. Varbin CNV workflow
     if (params.run_cnv_analysis &&
 	params.genome in params.varbin_supported_genomes) {
 
@@ -266,7 +280,12 @@ workflow {
             .map { cell_id, resolution, ploidy_file -> ploidy_file }
             .collect()
     
-	AGGREGATE_CNV_RESULTS(all_ploidy_results)
+	AGGREGATE_CNV_PLOIDY(all_ploidy_results)
+	
+	// Generate ploidy summary 
+	CNV_PLOIDY_SUMMARY(AGGREGATE_CNV_PLOIDY.out.combined_results)
+	log.info "CNV ploidy summary statistics generated successfully"
+
     }
     
 }
