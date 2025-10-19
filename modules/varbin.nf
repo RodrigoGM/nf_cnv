@@ -1,8 +1,11 @@
 // CNV Analysis using varbin from cna_utils
 process GET_BIN_COUNTS {
     tag "${cell_id}_${resolution}k"
-    publishDir "${params.outdir}/results/varbin${resolution}k", mode: 'copy',
-               pattern: "*.bed"
+    
+    publishDir "${params.outdir}/results/varbin${resolution}k/counts", mode: 'copy',
+               pattern: "*.bin.counts.bed"
+    publishDir "${params.outdir}/results/varbin${resolution}k/stats", mode: 'copy',
+               pattern: "*.bin.counts.stats.bed"
 
     input:
     tuple val(cell_id), path(strand_bam), path(strand_bai), val(resolution)
@@ -11,7 +14,7 @@ process GET_BIN_COUNTS {
     tuple val(cell_id), val(resolution), 
           path("${cell_id}.${params.genome}.PE_*.${resolution}k.bwa.bin.counts.bed"), 
           path("${cell_id}.${params.genome}.PE_*.${resolution}k.bwa.bin.counts.stats.bed"), emit: bin_counts
-    
+
     script:
     def genome_map = [hsa37: 'hg19', hsa38: 'hg38']
     def cna_genome = genome_map[params.genome]
@@ -30,10 +33,18 @@ process GET_BIN_COUNTS {
     """
 }
 
+// create different directories for each output
 process CNV_PROFILE {
     tag "${cell_id}_${resolution}k"
+    
+    publishDir "${params.outdir}/results/varbin${resolution}k/seg_long", mode: 'copy',
+               pattern: "*_seg.txt"
+    publishDir "${params.outdir}/results/varbin${resolution}k/seg_short", mode: 'copy',
+               pattern: "*_short_seg.txt"
+    publishDir "${params.outdir}/results/varbin${resolution}k/ploidy", mode: 'copy',
+               pattern: "*.quantal.ploidy.txt"
     publishDir "${params.outdir}/results/varbin${resolution}k", mode: 'copy',
-        pattern: "${cell_id}.${params.genome}.PE_*.${resolution}k.bwa*"
+               pattern: "*.quantal.log"
 
     input:
     tuple val(cell_id), val(resolution), path(bin_counts), path(bin_stats)
@@ -51,10 +62,10 @@ process CNV_PROFILE {
     def cna_genome = genome_map[params.genome]
     def strand_ext = params.use_reverse_reads ? 'PE_RV' : 'PE_FW'
     def output_prefix = "${cell_id}.${params.genome}.${strand_ext}.${resolution}k.bwa"
-    
+
     """
     echo "${resolution}k varbin CN estimation for ${cell_id}"
-    
+
     ${params.cna_utils_path}/scripts/cnvProfile.R \\
         -b ${bin_counts} \\
         -g ${params.cna_utils_path}/data/${cna_genome}_${resolution}k_gz_enc_gc.bed \\
@@ -62,17 +73,25 @@ process CNV_PROFILE {
         --minploidy=${params.min_ploidy} \\
         --maxploidy=${params.max_ploidy} \\
         -v 2> ${output_prefix}.quantal.log
-    
+
     # Extract ploidy and error information
     echo -e "cellID\\tploidy\\terror" > ${output_prefix}.quantal.ploidy.txt
-    
-    ploidy=\$(grep "Ploidy" ${output_prefix}.quantal.log | tail -n 1 | sed -e 's/.*Ploidy: //' || echo "NA")
+
+    ploidy=\$(grep "Ploidy" ${output_prefix}.quantal.log | tail -n 1 | sed -e 's/.*Ploidy: //' | awk '{printf "%.4f", \$1}' || echo "NA")
     error=\$(grep "Error" ${output_prefix}.quantal.log | tail -n 1 | sed -e 's/.*Error: //' | awk '{printf "%.4f", \$1}' || echo "NA")
-    
+
     echo -e "${cell_id}\\t\${ploidy}\\t\${error}" >> ${output_prefix}.quantal.ploidy.txt
+    
+    # Create seg files if they don't exist
+    for suffix in _seg.txt _short_seg.txt; do
+        if [[ ! -f "${output_prefix}\${suffix}" ]]; then
+            touch "${output_prefix}\${suffix}"
+        fi
+    done
     """
 }
 
+// Create ploidy files
 process AGGREGATE_CNV_PLOIDY {
     tag "all_samples"
     publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'
@@ -144,5 +163,60 @@ process CNV_PLOIDY_SUMMARY {
         -o ploidy_summary_all.tsv \\
         --group-by resolution
   
+    """
+}
+
+process AGGREGATE_SEG_MATRICES {
+    tag "all_samples_${resolution}k"
+    publishDir "${params.outdir}/results/cnv_summary/", mode: 'copy'
+
+    input:
+    tuple val(resolution), path(seg_files)
+
+    output:
+    path "chrom_info_${resolution}k.txt", emit: chrom_info
+    path "matrix_counts_${resolution}k.txt", emit: counts_matrix
+    path "matrix_ratio_${resolution}k.txt", emit: ratio_matrix
+    path "matrix_lowess_ratio_${resolution}k.txt", emit: lowess_ratio_matrix
+    path "matrix_seg_mean_${resolution}k.txt", emit: seg_mean_matrix
+    path "matrix_lowess_ratio_quantal_${resolution}k.txt", emit: lowess_ratio_quantal_matrix
+    path "matrix_seg_mean_quantal_${resolution}k.txt", emit: seg_mean_quantal_matrix
+
+    script:
+    """
+    ${projectDir}/bin/aggregate_seg_matrices.sh \\
+        --input-dir . \\
+        --resolution ${resolution} \\
+        --output-prefix .
+    """
+}
+
+process CREATE_CELL_PHENOTYPE_TEMPLATE {
+    tag "phenotype_template"
+    publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'
+
+    input:
+    path ploidy_20k_files
+
+    output:
+    path "cell_phenotype.txt", emit: phenotype_template
+
+    script:
+    """
+    # Create header
+    echo -e "cellID\\tbioID\\tsampleID\\tsubsample\\tplate\\tsubtype\\tmold.histology\\tmold.grade\\tmold.viability\\tmold.appearance\\tbarcode\\tsample.type\\tgate\\tpct.[HISTOLOGY1]\\tpct.[HISTOLOGY...]\\tpath.comments\\tploidy\\terror" > cell_phenotype.txt
+    
+    # Extract cell data from 20k ploidy files
+    for file in ${ploidy_20k_files}; do
+        if [[ \$file == *"20k"* ]]; then
+            tail -n +2 \$file | while IFS='\t' read -r cellID ploidy error; do
+                if [[ -n "\$cellID" ]]; then
+                    echo -e "\${cellID}\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\\t\${ploidy}\\t\${error}" >> cell_phenotype.txt
+                fi
+            done
+        fi
+    done
+    
+    echo "Created phenotype template with \$(tail -n +2 cell_phenotype.txt | wc -l) cells"
     """
 }

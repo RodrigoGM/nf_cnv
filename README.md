@@ -105,9 +105,16 @@ project/
 │   ├── bwa_out_md/        # Marked Duplicates BAMs
 │   ├── bwa_out_dd/        # DeDuplicated BAMs
 │   ├── bwa_out_fw/        # Read 1 BAMs Q30, Primary Genome
-│   ├── varbin5k/          # CNV results (5kb)
-│   ├── varbin20k/         # CNV results (20kb)
-│   ├── varbin50k/         # CNV results (50kb)
+|	├── varbin5k/          # CNV results (5kb)
+|	│   ├── counts/             # *.bin.counts.bed
+|	│   ├── stats/              # *.bin.counts.stats.bed
+|	│   ├── seg_long/           # *_seg.txt
+|	│   ├── seg_short/          # *_short_seg.txt
+|	│   └── ploidy/             # *.quantal.ploidy.txt
+|	├── varbin20k/         # CNV results (20kb)
+|	│   └── ...
+|	└── varbin50k/         # CNV results (50kb)
+|	|   └── ...
 │   ├── cnv_summary/       # Results and Statistics Summaries
 │   └── qc/                # Quality control reports
 ├── logs/                  # Execution logs and reports

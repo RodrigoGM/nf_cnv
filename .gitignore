@@ -1,0 +1,37 @@
+# Results and intermediate files
+results/
+logs/
+.nextflow*
+work/
+
+# Temporary files
+*.tmp
+tmp.*
+*.temp
+*~
+
+# Data files (comment out if you want to track them)
+seqdata/
+*.fastq.gz
+*.fq.gz
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# R files
+*.rda
+*.RData
+*.rds
+.Rproj.user
+.RData
+.Rhistory
+.httr-oauth
+.DS_Store
+.quarto
+

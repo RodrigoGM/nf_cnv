@@ -6,18 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-- CNV Results aggregation
-- Other BAM-level QC
 - QC Integration with MulitQC
 
 
 ### Added
-- GitHub repository setup with comprehensive documentation
-- Example configurations and test datasets
+
+## [0.6.0] - 2025-10-17
+
+### Added
+- **Result Organization**: Structured output directories for varbin results
+  - `counts/` and `stats/` subdirectories for bin count files
+  - `ploidy/`, `seg_long/`, `seg_short/` subdirectories for CNV outputs
+
+- **Matrix Aggregation**: Memory-efficient seg.txt matrix generation
+  - Bash-based implementation for handling 10K+ cell datasets
+  - Separate matrices for counts, ratios, and segmentation results
+
+- **Cell Phenotype Templates**: Automated phenotype table generation
+  - Pre-filled with cellID, ploidy, and error from 20k resolution
+  - Template columns for experimental metadata annotation
+
+- **Enhanced QC Workflows**: Improved quality control processes
+  - FastQ Screen integration with empty file handling
+  - Comprehensive BAM QC with Picard and Samtools modules
+  - Proper nf-core module integration and error strategies
+
+### Enhanced
+- **Resource Management**: Optimized memory allocation for large datasets
+- **Error Handling**: Robust handling of empty FASTQ and BAM files
+- **Process Organization**: Structured publishDir patterns for better file management
+- **Chromosome Filtering**: Dynamic chromosome selection for strand-specific analysis
+
+### Fixed
+- FastQ Screen failures on zero-read files using errorStrategy ignore
+- BAM QC module input channel formatting for nf-core compatibility
+- Memory exhaustion in seg matrix aggregation for large cell numbers
+- Cell phenotype template generation with proper 20k resolution filtering
+
+### Performance
+- Streamlined matrix operations for datasets with 1000+ cells
+- Reduced memory footprint for aggregation processes
+- Improved SLURM resource utilization and job scheduling
+
+### Infrastructure
+- Updated module configurations with appropriate resource allocations
+- Enhanced debugging capabilities with process execution logging
+- Comprehensive documentation updates with usage examples
+
 
 ## [0.5.0] - 2025-10-15
 
 ### Added
+- GitHub repository setup with comprehensive documentation
+- Example configurations and test datasets
 - Complete single-cell CNV processing pipeline
 - Automated barcode demultiplexing with 192-barcode support
 - Multi-resolution CNV calling (5k, 20k, 50k bins)
