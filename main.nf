@@ -26,6 +26,10 @@ include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/colle
 include { SAMTOOLS_FLAGSTAT } from './modules/nf-core/samtools/flagstat/main'
 include { SAMTOOLS_STATS } from './modules/nf-core/samtools/stats/main'
 include { SAMTOOLS_IDXSTATS } from './modules/nf-core/samtools/idxstats/main'
+// include { PRESEQ_CCURVE; PRESEQ_LCEXTRAP; PRESEQ_GCEXTRAP } from './modules/qc'
+
+// MULTIQC
+include { MULTIQC } from './modules/nf-core/multiqc/main'
 
 
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -160,7 +164,7 @@ workflow {
 
     // STEP 5: CELL-LEVEL FASTQ QUALITY CONTROL
 
-    // Run FastQC on demultiplexed cell FASTQ files
+    // 5.1 Run FastQC on demultiplexed cell FASTQ files
     cell_fastq_for_qc = BARCODE_SPLIT.out.cell_fastqs.map { cell_id, r1, r2 -> 
 	[[id: cell_id, single_end: false], [r1, r2]]
     }
@@ -168,7 +172,7 @@ workflow {
     
     log.info "FastQC completed on demultiplexed cells"
 
-    // FastQ Screen Contamination QC (on demultiplexted FASTQs)
+    // 5.2 FastQ Screen Contamination QC (on demultiplexted FASTQs)
     if (params.run_fastq_screen) {
 	// Prepare input channel from split cell fastqs
 	fastq_screen_input = BARCODE_SPLIT.out.cell_fastqs
@@ -268,6 +272,18 @@ workflow {
 	}
 	SAMTOOLS_IDXSTATS(idxstats_input)
 
+        // Preseq library complexity and genome coverage
+        // preseq_input = qc_bams.map { cell_id, bam, bai ->
+        //     [[id: cell_id, single_end: false], bam, bai]
+        // }
+	
+        // PRESEQ_CCURVE(preseq_input)
+        // PRESEQ_GCEXTRAP(preseq_input)
+
+	// if(params.run_lc_extrap) {
+        //     PRESEQ_LCEXTRAP(preseq_input) 
+        // }
+
 	log.info "BAM QC processes initiated"
     }
 
@@ -327,8 +343,31 @@ workflow {
         
         log.info "Cell phenotype template created"
     }
-}
 
+    
+    // STEP 10. MULTIQC
+    // MultiQC Report Generation -- with dependencies
+    // MultiQC Report Generation
+    if (params.run_multiqc) {
+        // Collect all QC files from results directory
+        multiqc_input = Channel.fromPath("${params.outdir}/results/qc/**/*", checkIfExists: false)
+            .collect()
+            .ifEmpty([])
+        
+        MULTIQC(
+            multiqc_input,
+            [],  // No custom config
+            [],  // No extra config  
+            [],  // No logo
+            [],  // No replace names
+            []   // No sample names
+        )
+        
+        log.info "MultiQC report generated"
+    }        
+
+    log.info "Pipeline Complete"
+}
 
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 def helpMessage() {

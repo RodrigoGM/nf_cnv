@@ -39,6 +39,7 @@ for file in "${SEG_FILES[@]}"; do
     CELL_IDS+=("$cell_id")
 done
 
+
 # Create matrices using paste (much more memory efficient)
 declare -a COLUMNS=(4 7 8 9 10 11)  # count ratio lowess.ratio seg.mean lowess.ratio.quantal seg.mean.quantal
 declare -a NAMES=("counts" "ratio" "lowess_ratio" "seg_mean" "lowess_ratio_quantal" "seg_mean_quantal")
@@ -49,11 +50,12 @@ for i in "${!COLUMNS[@]}"; do
     echo "Processing ${name} matrix (column ${col})..."
     
     # Create header
-    printf "%s" "${CELL_IDS[0]}"
-    for ((j=1; j<${#CELL_IDS[@]}; j++)); do
-        printf "\t%s" "${CELL_IDS[$j]}"
-    done
-    printf "\n" > "${OUTPUT_PREFIX}/matrix_${name}_${RESOLUTION}k.txt"
+    echo ${CELL_IDS[@]} | tr ' ' "\t" > "${OUTPUT_PREFIX}/matrix_${name}_${RESOLUTION}k.txt"
+    #printf "%s" "${CELL_IDS[0]}"
+    #for ((j=1; j<${#CELL_IDS[@]}; j++)); do
+    #printf "\t%s" "${CELL_IDS[$j]}"
+    #done
+    #printf "\n" > "${OUTPUT_PREFIX}/matrix_${name}_${RESOLUTION}k.txt"
     
     # Use paste with process substitution for memory efficiency
     paste_cmd=""

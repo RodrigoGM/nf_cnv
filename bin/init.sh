@@ -190,30 +190,23 @@ cat > "$CONFIG_DIR/nextflow.config" << EOL
 
 // Include base configurations
 includeConfig "\${launchDir}/nf_cnv/conf/base.config"
+includeConfig "\${launchDir}/nf_cnv/conf/modules.config"
 includeConfig "\${launchDir}/nf_cnv/conf/slurm.config"
+
+// Project-specific configuration
+// Set work directory for this project
+// workDir = "${launchDir}/work"
+
 
 params {
     // Project Information
     project = "$PROJECT_NAME"
     description = "$PROJECT_DESCRIPTION"
-    
-    // Input/Output Directories
-    seqdata = "\${launchDir}/seqdata"
-    outdir = "\${launchDir}/results"
-    
-    // Sample Configuration
-    sampleSheet = "\${launchDir}/config/samples.csv"
-    
-    // Barcode Parameters
-    barcode_file = "$BARCODE_FILE"
-    barcode_max_mismatches = $BARCODE_MISMATCHES
-    barcode_search_len = $BARCODE_SEARCH_LEN
-    barcode_rc = $BARCODE_RC
-    barcode_trim = $BARCODE_TRIM
-    
-    // Quality Control
-    min_reads_per_cell = 1000
-    max_cells_per_sample = 10000
+    genome = "hsa38" // select genome [hsa37, mm10, mm39, pdx37]
+    primary_chromosomes = "{1..22} X Y"
+
+    // seg aggregation override
+    aggregate_seg_memory = '64.GB'    
     
     // Output Options
     publish_dir_mode = 'copy'
@@ -227,26 +220,14 @@ process {
     clusterOptions = '--account=$SLURM_ACCOUNT'
     
     // Error handling
-    errorStrategy = 'retry'
+    errorStrategy = { task.attempt <= 2 ? 'retry' : 'finish' }
     maxRetries = 2
-    
-    // Process-specific resources
-    withName: CONCAT_FASTQ_FILES {
-        cpus = $CONCAT_CPUS
-        memory = '$CONCAT_MEM GB'
-        time = '4.h'
+
+    withName: BARCODE_SPLIT {
+        time = '12h'  // Allow more time for this project
     }
-    
-    withName: SPLIT_BY_BARCODE {
-        cpus = $SPLIT_CPUS
-        memory = '$SPLIT_MEM GB'
-        time = '8.h'
-    }
-    
-    withName: '.*QC.*' {
-        cpus = 1
-        memory = '4 GB'
-        time = '2.h'
+    withName: 'PRESEQ_CCURVE|PRESEQ_LCEXTRAP|PRESEQ_GCEXTRAP' {
+        conda = '/usersoftware/singers/miniforge3/envs/preseq'
     }
 }
 

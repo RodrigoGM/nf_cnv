@@ -6,10 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-- QC Integration with MulitQC
+- **Preseq Analysis**: Library complexity estimation suite
+  - C-curve complexity analysis
+  - LC-extrap library complexity extrapolation
+  - GC-extrap genomic coverage extrapolation
+  - Separate output directories for each metric
 
+- **MultiQC Integration** : 
+  - create process dependencies so it runs after all QC processes are complete
+
+## [0.7.0] - 2025-10-18
 
 ### Added
+- **MultiQC Integration**: Comprehensive QC report aggregation with nf-core module
+  - Custom report naming with project-specific titles
+  - Output to cnv_summary directory with uppercase naming convention
+
+- **Cell Phenotype Templates**: Automated metadata template generation
+  - Pre-filled with cellID, ploidy, and error from 20k resolution
+  - Template columns for experimental annotation
+  - Published to cnv_summary directory
+
+- **Structured Varbin Outputs**: Organized CNV result directories
+  - counts/ and stats/ subdirectories for bin counts
+  - ploidy/, seg_long/, seg_short/ subdirectories for CNV calls
+  - Improved result organization and accessibility
+
+### Enhanced
+- **Configuration Consolidation**: Unified resource management
+  - Consolidated process resources into modules.config
+  - Clearer separation: params in base.config, resources in modules.config
+
+- **Resource Optimization**: Improved memory and CPU allocation
+  - MultiQC: 32GB for large dataset processing
+  - AGGREGATE_SEG_MATRICES: Configurable memory (default 32GB)
+  - FastQ Screen: 64GB for large genome indices
+
+- **Work Directory Cleanup**: Automatic intermediate file removal
+  - Reduced work directory footprint
+  - Cleanup of merged FASTQs, intermediate BAM, and temporary files
+  - Configurable cleanup policies per process
+
+### Fixed
+- MultiQC output pattern matching for custom filenames
+- BAM QC module input channel formatting for nf-core compatibility
+- FastQ Screen error handling for empty files
+- Memory allocation overrides in SLURM configuration
+- Process resource hierarchy and precedence rules
+
+### Performance
+- Optimized matrix aggregation with memory-efficient bash implementation
+- Automatic cleanup reduces storage requirements by ~70%
+- Improved SLURM resource utilization with proper queue management
+
+### Infrastructure
+- Enhanced init.sh with improved project setup workflow
+- Updated configuration hierarchy documentation
+- Clarified params vs process config separation
+
 
 ## [0.6.0] - 2025-10-17
 
