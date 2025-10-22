@@ -347,24 +347,55 @@ workflow {
     
     // STEP 10. MULTIQC
     // MultiQC Report Generation -- with dependencies
-    // MultiQC Report Generation
     if (params.run_multiqc) {
-        // Collect all QC files from results directory
-        multiqc_input = Channel.fromPath("${params.outdir}/results/qc/**/*", checkIfExists: false)
-            .collect()
-            .ifEmpty([])
+        // Collect all QC outputs
+        multiqc_files = Channel.empty()
+        
+        // Add FastQC results
+        multiqc_files = multiqc_files.mix(
+            FASTQC.out.zip.map { it[1] }.collect().ifEmpty([])
+        )
+        
+        // Add FastQ Screen results if available
+        if (params.run_fastq_screen) {
+            multiqc_files = multiqc_files.mix(
+                FASTQ_SCREEN.out.screen_results.map { it[1] }.collect().ifEmpty([])
+            )
+        }
+        
+        // Add BAM QC results if enabled
+        if (params.run_bam_qc) {
+            multiqc_files = multiqc_files.mix(
+                SAMTOOLS_FLAGSTAT.out.flagstat.map { it[1] }.collect().ifEmpty([]),
+                SAMTOOLS_IDXSTATS.out.idxstats.map { it[1] }.collect().ifEmpty([]),
+                SAMTOOLS_STATS.out.stats.map { it[1] }.collect().ifEmpty([]),
+                PICARD_COLLECTMULTIPLEMETRICS.out.metrics.map { it[1] }.collect().ifEmpty([])
+            )
+        }
+	
+        // Add Preseq results if enabled
+        // multiqc_files = multiqc_files.mix(
+        //     PRESEQ_CCURVE.out.ccurve.map { it[1] }.collect().ifEmpty([]),
+        //     PRESEQ_GCEXTRAP.out.gcextrap.map { it[1] }.collect().ifEmpty([])
+        // )
+	// if (params.run_lc_extrap) {
+	//     PRESEQ_LCEXTRAP.out.lcextrap.map { it[1] }.collect().ifEmpty([])
+	// }
+        
+        // Collect all files and run MultiQC
+        all_qc_files = multiqc_files.flatten().collect()
         
         MULTIQC(
-            multiqc_input,
+            all_qc_files,
             [],  // No custom config
-            [],  // No extra config  
+            [],  // No extra config
             [],  // No logo
             [],  // No replace names
             []   // No sample names
         )
         
         log.info "MultiQC report generated"
-    }        
+    }
 
     log.info "Pipeline Complete"
 }

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GC-extrap genomic coverage extrapolation
   - Separate output directories for each metric
 
+
+## [0.7.1] - 2025-10-22
+
+### Added
 - **MultiQC Integration** : 
   - create process dependencies so it runs after all QC processes are complete
 
