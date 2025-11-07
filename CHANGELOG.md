@@ -6,11 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+- **QDNAseq Analysis**: 
+  - include 100 and 150 mappable Kb variable length bins for mm39 and hsa38
+
+
 - **Preseq Analysis**: Library complexity estimation suite
   - C-curve complexity analysis
   - LC-extrap library complexity extrapolation
   - GC-extrap genomic coverage extrapolation
   - Separate output directories for each metric
+
+- Input verification for `GET_BIN_COUNTS`
+
+## [0.7.2] - 2025-10-28
+
+### Fixed
+- **NFS File Staging Reliability**: Enhanced robustness for large-scale datasets
+  - Increased file staging timeout to 30 minutes
+  - Added 5-retry mechanism with exponential backoff for file transfers
+  - Implemented sync delays (3-5s) before process execution in I/O-heavy steps
+  - Added input validation in GET_BIN_COUNTS to detect missing BAM files
+  
+- **Error Handling Strategy**: Unified retry logic
+  - Ignore QC non-recoverable errors to maintain pipeline flow
+  - Prevent premature pipeline termination on isolated failures
+
+- **File Porter Configuration**: Optimized for NFS environments
+  - maxRetries increased from 3 to 5
+  - pollInterval adjusted to 15 seconds to reduce NFS load
+  - maxTransfers set to 50 to prevent filesystem overwhelm
+
+### Changed
+- Simplified BARCODE_SPLIT dummy read generation logic
+- Increase staging timing  `CAT_FASTQ`, `FILTER_AND_EXTRACT_READS`, and `GET_BIN_COUNTS`
+- Consolidated error handling across all processes
+- Enhanced beforeScript, and afterScript delays for large file operations
 
 
 ## [0.7.1] - 2025-10-22
