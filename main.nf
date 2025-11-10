@@ -22,7 +22,7 @@ include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_PLOIDY; CNV_PLOIDY_SUMMARY 
 // BAM QC 
 include { QUALIMAP_BAMQC } from './modules/nf-core/qualimap/bamqc/main'
 include { PICARD_COLLECTMULTIPLEMETRICS } from './modules/nf-core/picard/collectmultiplemetrics/main'
-include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/collectinsertsizemetrics/main'
+//include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/collectinsertsizemetrics/main'
 include { SAMTOOLS_FLAGSTAT } from './modules/nf-core/samtools/flagstat/main'
 include { SAMTOOLS_STATS } from './modules/nf-core/samtools/stats/main'
 include { SAMTOOLS_IDXSTATS } from './modules/nf-core/samtools/idxstats/main'
@@ -246,10 +246,10 @@ workflow {
         )
 	
 	// Picard CollectInsertSizeMetrics: expects [meta, bam]
-	picard_insert_input = qc_bams.map { cell_id, bam, bai -> 
-            [[id: cell_id, single_end: false], bam]
-	}
-	PICARD_COLLECTINSERTSIZEMETRICS(picard_insert_input)
+	// picard_insert_input = qc_bams.map { cell_id, bam, bai -> 
+        //     [[id: cell_id, single_end: false], bam]
+	// }
+	// PICARD_COLLECTINSERTSIZEMETRICS(picard_insert_input)
 	
         // Samtools stats: expects [meta, input, input_index], [meta2, fasta]
         stats_input = qc_bams.map { cell_id, bam, bai ->
