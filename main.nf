@@ -192,8 +192,10 @@ workflow {
     
     // STEP 6: SEQUENCE ALIGNMENT
     // Run BWA-MEM alignment on cell FASTQ files
+    // Filter cell_fastqs by minimum read count
     alignment_input = BARCODE_SPLIT.out.cell_fastqs
-    BWA_MEM(alignment_input)
+
+    BWA_MEM(alignment_input)   
 
     // Validate BAM files before processing
     VALIDATE_BAM(BWA_MEM.out.unsorted_bam)

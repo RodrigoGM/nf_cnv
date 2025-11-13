@@ -216,19 +216,51 @@ params {
 // Process Configuration
 process {
     executor = 'slurm'
-    queue = '$SLURM_QUEUE'
+    queue = { task.attempt == 1 ? 'preemptable' :'$SLURM_QUEUE' }
     clusterOptions = '--account=$SLURM_ACCOUNT'
     
     // Error handling
-    errorStrategy = { task.attempt <= 2 ? 'retry' : 'finish' }
-    maxRetries = 2
+    errorStrategy = {
+        task.exitStatus in [143, 137, 271] ? 'retry' : 'ignore'
+        task.attempt <= 10 ? 'retry' : 'finish' }
+    maxRetries = 10
 
-    withName: BARCODE_SPLIT {
-        time = '12h'  // Allow more time for this project
+    // Critical/fast processes always on cpu
+    withName: 'AGGREGATE_*|CREATE_*|MULTIQC' {
+        queue = '$SLURM_QUEUE'
+        maxRetries = 10
     }
-    withName: 'PRESEQ_CCURVE|PRESEQ_LCEXTRAP|PRESEQ_GCEXTRAP' {
-        conda = '/usersoftware/singers/miniforge3/envs/preseq'
+
+    // Long processes: split load
+    withName: 'BARCODE_SPLIT|BWA_MEM|MARK_DUPLICATES|REMOVE_DUPLICATES|GET_BIN_COUNTS|CNV_PROFILE' {
+        queue = { 
+            // 50/50 split based on task hash
+            Math.abs(task.hash.toString().hashCode()) % 2 == 0 ? 
+                '$SLURM_QUEUE' : 'preemptable' 
+        }
+        clusterOptions = { task.attempt > 6 ? 
+            "--partition='$SLURM_QUEUE'" : ""  // Retries always go to $SLURM_QUEUE
+        }
+        maxRetries = 10
     }
+
+    // QC steps go mostly to preemptable
+    withName: 'FASTQC|FASTQ_SCREEN|SAMTOOLS_FLAGSTAT|SAMTOOLS_STATS|SAMTOOLS_IDXSTATS|PICARD_COLLECTMULTIPLEMETRICS|QUALIMAP_BAMQC' {
+        // 70% preemptable, 30% cpu
+        queue = { 
+            new Random().nextInt(100) < 70 ? 'preemptable' : '$SLURM_QUEUE' 
+        }
+    
+	// Alternate on retry
+    	clusterOptions = { 
+            def partition = task.attempt % 2 == 1 ? 'preemptable' : '$SLURM_QUEUE'
+            "--partition=${partition}"
+    	}
+    
+	errorStrategy = 'retry'
+    	maxRetries = 10
+    }
+
 }
 
 // Executor Configuration
