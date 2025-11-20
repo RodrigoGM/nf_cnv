@@ -13,19 +13,10 @@ process BWA_MEM {
     def rg_line = "@RG\\tID:${cell_id}\\tSM:${cell_id}\\tPL:ILLUMINA\\tLB:${cell_id}"
     """
     # Check if FASTQ files have content
-    r1_reads=\$(zcat ${r1_file} | head -n 4 | wc -l)
-    r2_reads=\$(zcat ${r2_file} | head -n 4 | wc -l)
+    bwa mem -aM -t ${task.cpus} -R "${rg_line}" \\
+        ${bwa_index} ${r1_file} ${r2_file} | \\
+        samtools view -bS - > ${cell_id}.unsorted.bam
     
-    if [[ \$r1_reads -eq 0 || \$r2_reads -eq 0 ]]; then
-        echo "Empty FASTQ files detected, creating empty BAM"
-        bwa mem -aM -t ${task.cpus} -R "${rg_line}" \\
-            ${bwa_index} <(echo | gzip -c) <(echo | gzip -c) | \\
-            samtools view -bS -F 4 - > ${cell_id}.unsorted.bam
-    else
-        bwa mem -aM -t ${task.cpus} -R "${rg_line}" \\
-            ${bwa_index} ${r1_file} ${r2_file} | \\
-            samtools view -bS -F 4 - > ${cell_id}.unsorted.bam
-    fi
     """
 }
 
@@ -97,34 +88,26 @@ process MARK_DUPLICATES {
         "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance}"
     
     """
-    # Check if BAM has alignments
-    read_count=\$(samtools view -c ${sorted_bam})
-    
-    if [[ \$read_count -eq 0 ]]; then
-        echo "No aligned reads, creating empty output"
-        cp ${sorted_bam} ${cell_id}.${params.genome}.PE.md.bam
-        samtools index ${cell_id}.${params.genome}.PE.md.bam
-        echo -e "## No reads for duplicate marking\\nLIBRARY\\tUNPAIRED_READS_EXAMINED\\tREAD_PAIRS_EXAMINED\\tSECONDARY_OR_SUPPLEMENTARY_RDS\\tUNMAPPED_READS\\tUNPAIRED_READ_DUPLICATES\\tREAD_PAIR_DUPLICATES\\tREAD_PAIR_OPTICAL_DUPLICATES\\tPERCENT_DUPLICATION\\tESTIMATED_LIBRARY_SIZE\\n${cell_id}\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0" > ${cell_id}.dup_metrics.txt
-    else
-        picard MarkDuplicates \\
-            -INPUT ${sorted_bam} \\
-            -OUTPUT ${cell_id}.${params.genome}.PE.md.bam \\
-            -METRICS_FILE ${cell_id}.dup_metrics.txt \\
-            -CREATE_INDEX true \\
-            -VALIDATION_STRINGENCY LENIENT \\
-            -ASSUME_SORT_ORDER coordinate \\
-            ${optical_params}
+    picard MarkDuplicates \\
+        -INPUT ${sorted_bam} \\
+        -OUTPUT ${cell_id}.${params.genome}.PE.md.bam \\
+        -METRICS_FILE ${cell_id}.dup_metrics.txt \\
+        -CREATE_INDEX true \\
+        -VALIDATION_STRINGENCY LENIENT \\
+        -ASSUME_SORT_ORDER coordinate \\
+        ${optical_params}
 
     mv ${cell_id}.${params.genome}.PE.md.bai  ${cell_id}.${params.genome}.PE.md.bam.bai
-    fi
+
     """
 }
 
 // Picard remove duplicates
 process REMOVE_DUPLICATES {
     tag "${cell_id}"
-    publishDir "${params.outdir}/results/bwa_out_dd", mode: 'copy',
-              pattern: "*.${params.genome}.PE.dd.bam*"
+    // conditional publication in modules.config
+    // publishDir "${params.outdir}/results/bwa_out_dd", mode: 'copy',
+    //           pattern: "*.${params.genome}.PE.dd.bam*"
 
     input:
     tuple val(cell_id), path(marked_bam), path(marked_bai)
@@ -140,35 +123,28 @@ process REMOVE_DUPLICATES {
         "-OPTICAL_DUPLICATE_PIXEL_DISTANCE ${params.optical_duplicate_pixel_distance ?: 2500}"
     
     """
-    # Check if BAM has alignments
-    read_count=\$(samtools view -c ${marked_bam})
+    picard MarkDuplicates \\
+        -INPUT ${marked_bam} \\
+        -OUTPUT ${cell_id}.${params.genome}.PE.dd.bam \\
+        -METRICS_FILE ${cell_id}.dd_metrics.txt \\
+        -REMOVE_DUPLICATES true \\
+        -CREATE_INDEX true \\
+        -VALIDATION_STRINGENCY LENIENT \\
+        -ASSUME_SORT_ORDER coordinate \\
+        ${optical_params}
     
-    if [[ \$read_count -eq 0 ]]; then
-        echo "No aligned reads, creating empty output"
-        cp ${marked_bam} ${cell_id}.${params.genome}.PE.dd.bam
-        samtools index ${cell_id}.${params.genome}.PE.dd.bam
-        echo -e "## No reads for duplicate removal\\nLIBRARY\\tUNPAIRED_READS_EXAMINED\\tREAD_PAIRS_EXAMINED\\tSECONDARY_OR_SUPPLEMENTARY_RDS\\tUNMAPPED_READS\\tUNPAIRED_READ_DUPLICATES\\tREAD_PAIR_DUPLICATES\\tREAD_PAIR_OPTICAL_DUPLICATES\\tPERCENT_DUPLICATION\\tESTIMATED_LIBRARY_SIZE\\n${cell_id}\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0" > ${cell_id}.dd_metrics.txt
-    else
-        picard MarkDuplicates \\
-            -INPUT ${marked_bam} \\
-            -OUTPUT ${cell_id}.${params.genome}.PE.dd.bam \\
-            -METRICS_FILE ${cell_id}.dd_metrics.txt \\
-            -REMOVE_DUPLICATES true \\
-            -CREATE_INDEX true \\
-            -VALIDATION_STRINGENCY LENIENT \\
-            -ASSUME_SORT_ORDER coordinate \\
-            ${optical_params}
     mv ${cell_id}.${params.genome}.PE.dd.bai ${cell_id}.${params.genome}.PE.dd.bam.bai
-    fi
+
     """
 }
 
 // Quality Filter, and Mate Clipping
 process FILTER_AND_EXTRACT_READS {
     tag "${cell_id}"
-    publishDir "${params.outdir}/results/${params.use_reverse_reads ? 'bwa_out_rv' : 'bwa_out_fw'}",
-	       mode: 'copy',
-               pattern: "*.${params.genome}.PE_*.dd.bam*"
+    // conditional publication in modules.config
+    // publishDir "${params.outdir}/results/${params.use_reverse_reads ? 'bwa_out_rv' : 'bwa_out_fw'}",
+    //       mode: 'copy',
+    //       pattern: "*.${params.genome}.PE_*.dd.bam*"
 
     input:
     tuple val(cell_id), path(dedup_bam), path(dedup_bai)
@@ -183,7 +159,7 @@ process FILTER_AND_EXTRACT_READS {
     def strand_suffix = params.use_reverse_reads ? 'RV' : 'FW'
     
     """
-    # Filter unique reads and extract strand in one step
+    # Filter unique reads, q 30, and extract forward or reverse read in one step
     samtools view -@ ${task.cpus} -q 30 -F 0x800 -f ${strand_flag} -h -b \\
         -o ${cell_id}.${params.genome}.PE_${strand_suffix}.dd.bam \\
         ${dedup_bam} ${params.primary_chromosomes}
@@ -216,4 +192,3 @@ process VALIDATE_BAM {
     echo "BAM validation passed for ${cell_id}"
     """
 }
-

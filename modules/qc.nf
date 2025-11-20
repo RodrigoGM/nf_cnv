@@ -2,8 +2,9 @@
 
 process FASTQ_SCREEN {
     tag "${cell_id}"
-    publishDir "${params.outdir}/results/qc/fastq_screen", mode: 'copy',
-               pattern: "*_screen.*"
+    // no need to publish
+    // publishDir "${params.outdir}/results/qc/fastq_screen", mode: 'copy',
+    //           pattern: "*_screen.*"
 
     input:
     tuple val(cell_id), path(fastq_r1), path(fastq_r2)
@@ -39,7 +40,7 @@ process FASTQ_SCREEN {
     fi
     """
 }
-// 
+
 // // estimate complexity curve
 // process PRESEQ_CCURVE {
 //     tag "${meta.id}"

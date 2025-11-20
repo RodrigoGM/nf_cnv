@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Input verification for `GET_BIN_COUNTS`
 
+- Conditional VARBIN outputs
+
+## [0.7.4] - 2025-11-20
+
+### Changed
+- Conditional FASTQ aligment, only cells with greater than params.minimum_read_count are aligned
+
+### Fixed
+- Phenotype template file (`cell_phenotype.txt`) now includes *only* cells actually passing read-count thresholds and processed/aligned, ensuring downstream consistency and avoiding empty rows.
+- Robust join/filter for sequence alignment using barcode stats, protecting pipeline against sample filtering mismatches.
+- main.nf code formatting
+
+
+## [0.7.3] - 2025-10-28
+
+### Changed
+- **Conditional Outputs**: QC, and intermediary BAM files are no longer published by default.  Varbin process outputs are now routed to new, organized subdirectories, however plans are being made to conditionally publish.
+
+- **Slurm partition usage**: Most processes are now joinly submitted two paritions (a standard and a preemptable by default) for improved resource cost-efficiency without affecting core results.
+
+- **Process cleanup and staging**: Enhanced intermediate file cleanup and staging delays for better stability and performance on large datasets and NFS-backed clusters.
+
+### Fixed
+- Small bugs and redundancies in output and resource management.
+
+
 ## [0.7.2] - 2025-10-28
 
 ### Fixed

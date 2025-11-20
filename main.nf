@@ -22,7 +22,7 @@ include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_PLOIDY; CNV_PLOIDY_SUMMARY 
 // BAM QC 
 include { QUALIMAP_BAMQC } from './modules/nf-core/qualimap/bamqc/main'
 include { PICARD_COLLECTMULTIPLEMETRICS } from './modules/nf-core/picard/collectmultiplemetrics/main'
-include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/collectinsertsizemetrics/main'
+//include { PICARD_COLLECTINSERTSIZEMETRICS } from './modules/nf-core/picard/collectinsertsizemetrics/main'
 include { SAMTOOLS_FLAGSTAT } from './modules/nf-core/samtools/flagstat/main'
 include { SAMTOOLS_STATS } from './modules/nf-core/samtools/stats/main'
 include { SAMTOOLS_IDXSTATS } from './modules/nf-core/samtools/idxstats/main'
@@ -192,9 +192,29 @@ workflow {
     
     // STEP 6: SEQUENCE ALIGNMENT
     // Run BWA-MEM alignment on cell FASTQ files
+    // alignment_input = BARCODE_SPLIT.out.cell_fastqs
+    // Filter cell_fastqs by minimum read count
     alignment_input = BARCODE_SPLIT.out.cell_fastqs
+	.map { combo_id, r1, r2 -> tuple(combo_id, r1, r2) }
+	.join(
+            BARCODE_SPLIT.out.stats.map { sample_id, barcode_name, stats_file ->
+		def combo_id = "${sample_id}_${barcode_name}"
+		tuple(combo_id, stats_file)
+            },
+            by: 0
+	)
+	.filter { combo_id, r1, r2, stats_file ->
+            def count_line = stats_file.text.readLines()[0]
+            def read_count = (count_line.tokenize('\t').size() > 4) ? count_line.tokenize('\t')[4] as Long : 0L
+            read_count > params.minimum_read_count
+	}
+	.map { combo_id, r1, r2, stats_file -> tuple(combo_id, r1, r2) }
+    
     BWA_MEM(alignment_input)
 
+    // Extract all processed combo_ids (cell_id_barcode) as a set
+    processed_cell_ids = alignment_input.map { combo_id, r1, r2 -> combo_id }
+    
     // Validate BAM files before processing
     VALIDATE_BAM(BWA_MEM.out.unsorted_bam)
 
@@ -218,7 +238,7 @@ workflow {
     log.info "Post-alignment filtering complete: extracted ${strand_suffix} reads for single-end analysis"
 
     
-    // STEP 8. BAM Quality Control - CORRECTED VERSION
+    // STEP 8. BAM Quality Control
     if (params.run_bam_qc) {
 	// Use deduplicated BAMs for QC
 	qc_bams = REMOVE_DUPLICATES.out.dedup_bam
@@ -246,10 +266,10 @@ workflow {
         )
 	
 	// Picard CollectInsertSizeMetrics: expects [meta, bam]
-	picard_insert_input = qc_bams.map { cell_id, bam, bai -> 
-            [[id: cell_id, single_end: false], bam]
-	}
-	PICARD_COLLECTINSERTSIZEMETRICS(picard_insert_input)
+	// picard_insert_input = qc_bams.map { cell_id, bam, bai -> 
+        //     [[id: cell_id, single_end: false], bam]
+	// }
+	// PICARD_COLLECTINSERTSIZEMETRICS(picard_insert_input)
 	
         // Samtools stats: expects [meta, input, input_index], [meta2, fasta]
         stats_input = qc_bams.map { cell_id, bam, bai ->
@@ -332,13 +352,19 @@ workflow {
 	CNV_PLOIDY_SUMMARY(AGGREGATE_CNV_PLOIDY.out.combined_results)
 	log.info "CNV ploidy summary statistics generated successfully"
 	
-        // Create cell phenotype template - CORRECTED VERSION
-        // Create cell phenotype template - FIXED for subdirectory structure
-        ploidy_20k_files = Channel.fromPath("${params.outdir}/results/varbin20k/ploidy/*.quantal.ploidy.txt")
-            .collect()
-        
-        // ploidy_20k_files.view { "Ploidy 20k files: ${it}" }
-        
+        // Create cell phenotype template
+	// List available ploidy result files (20k resolution example)
+	ploidy_20k_files = Channel.fromPath("${params.outdir}/results/varbin20k/ploidy/*.quantal.ploidy.txt")
+	
+	// Now join with processed_cell_ids, so only include cells actually processed
+	phenotype_ploidy_files = ploidy_20k_files
+	    .map { ploidy_file ->
+		def combo_id = ploidy_file.getBaseName().tokenize('.')[0]  // this matches combo_id
+		tuple(combo_id, ploidy_file)
+	    }
+	    .join(processed_cell_ids.map { combo_id -> tuple(combo_id) }, by: 0)
+	    .map { combo_id, ploidy_file -> ploidy_file }
+	
         CREATE_CELL_PHENOTYPE_TEMPLATE(ploidy_20k_files)
         
         log.info "Cell phenotype template created"
