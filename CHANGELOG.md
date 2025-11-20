@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Input verification for `GET_BIN_COUNTS`
 
+- Conditional VARBIN outputs
+
+## [0.7.4] - 2025-11-20
+
+### Changed
+- Conditional FASTQ aligment, only cells with greater than params.minimum_read_count are aligned
+
+### Fixed
+- Phenotype template file (`cell_phenotype.txt`) now includes *only* cells actually passing read-count thresholds and processed/aligned, ensuring downstream consistency and avoiding empty rows.
+- Robust join/filter for sequence alignment using barcode stats, protecting pipeline against sample filtering mismatches.
+- main.nf code formatting
+
+
 ## [0.7.3] - 2025-10-28
 
 ### Changed
