@@ -1,6 +1,6 @@
 # nf-cnv: Single Cell Copy Number Variation Analysis Pipeline
 
-[![nf-cnv v0.7.4](https://img.shields.io/badge/version-0.7.4-D40000.svg)](https://github.com/RodrigoGM/nf_cnv/)
+[![nf-cnv v0.8.0](https://img.shields.io/badge/version-0.8.0-D40000.svg)](https://github.com/RodrigoGM/nf_cnv/)
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
 [![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/bsd-3-clause)
 

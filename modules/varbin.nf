@@ -191,6 +191,30 @@ process AGGREGATE_SEG_MATRICES {
     """
 }
 
+process AGGREGATE_BIN_COUNTS_STATS {
+    tag "bin_counts_stats_${resolution}k"
+    publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'
+
+    input:
+    tuple val(resolution), path(stats_files)
+
+    output:
+    path "bin_counts_stats_${resolution}k.txt", emit: agg_stats
+
+    script:
+    """
+    echo -e "cellID\\ttotal.aligned\\tpassed.reads\\tfiltered.reads\\tcounted.reads" > bin_counts_stats_${resolution}k.txt
+    for file in ${stats_files}; do
+        cell_id=\$(basename \$file | cut -d. -f1)
+        total=\$(awk '/Total alignments:/ {print \$3}' \$file)
+        passed=\$(awk '/Passed alignments:/ {print \$3}' \$file)
+        filtered=\$(awk '/Filtered alignments:/ {print \$3}' \$file)
+        counted=\$(awk '/Counted alignments:/ {print \$3}' \$file)
+        echo -e "\${cell_id}\\t\${total}\\t\${passed}\\t\${filtered}\\t\${counted}" >> bin_counts_stats_${resolution}k.txt
+    done
+    """
+}
+
 process CREATE_CELL_PHENOTYPE_TEMPLATE {
     tag "phenotype_template"
     publishDir "${params.outdir}/results/cnv_summary", mode: 'copy'

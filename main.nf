@@ -17,7 +17,8 @@ include { BWA_MEM; COLLATE_BAM; FIXMATE_BAM; SORT_BAM; MARK_DUPLICATES;
 
 // VARBIN
 include { GET_BIN_COUNTS; CNV_PROFILE; AGGREGATE_CNV_PLOIDY; CNV_PLOIDY_SUMMARY ;
-	 AGGREGATE_SEG_MATRICES ; CREATE_CELL_PHENOTYPE_TEMPLATE } from './modules/varbin'
+	 AGGREGATE_SEG_MATRICES ; AGGREGATE_BIN_COUNTS_STATS ;
+	 CREATE_CELL_PHENOTYPE_TEMPLATE } from './modules/varbin'
 	
 // BAM QC 
 include { QUALIMAP_BAMQC } from './modules/nf-core/qualimap/bamqc/main'
@@ -322,6 +323,15 @@ workflow {
 	
 	// Run bin counting
 	GET_BIN_COUNTS(cnv_input_ch)
+
+	// Assume you have resolution_ch and GET_BIN_COUNTS as before
+	binstats_by_resolution = GET_BIN_COUNTS.out.bin_counts
+	    .map { cell_id, resolution, counts_bed, stats_bed -> tuple(resolution, stats_bed) }
+	    .groupTuple(by: 0)
+	
+	AGGREGATE_BIN_COUNTS_STATS(binstats_by_resolution)
+	log.info "Aggregated bin.counts.stats.bed generated for each resolution"
+	
 	
 	// Run CNV profiling
 	CNV_PROFILE(GET_BIN_COUNTS.out.bin_counts)

@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Conditional VARBIN outputs
 
+
+## [0.8.0] - 2025-11-20
+
+### Added
+- Automatic creation of bin count stats summary table (`bin_counts_stats_<res>k.txt`) in `cnv_summary/` 
+
+
 ## [0.7.4] - 2025-11-20
 
 ### Changed
