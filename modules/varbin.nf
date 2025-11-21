@@ -2,10 +2,10 @@
 process GET_BIN_COUNTS {
     tag "${cell_id}_${resolution}k"
     // conditional publishDir in modules.config
-    //publishDir "${params.outdir}/results/varbin${resolution}k/counts", mode: 'copy',
-    //           pattern: "*.bin.counts.bed"
-    //publishDir "${params.outdir}/results/varbin${resolution}k/stats", mode: 'copy',
-    //           pattern: "*.bin.counts.stats.bed"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/counts", mode: 'copy',
+    //            pattern: "*.bin.counts.bed"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/stats", mode: 'copy',
+    //            pattern: "*.bin.counts.stats.bed"
 
     input:
     tuple val(cell_id), path(strand_bam), path(strand_bai), val(resolution)
@@ -37,14 +37,14 @@ process GET_BIN_COUNTS {
 process CNV_PROFILE {
     tag "${cell_id}_${resolution}k"
     
-    publishDir "${params.outdir}/results/varbin${resolution}k/seg_long", mode: 'copy',
-               pattern: "*_seg.txt"
-    publishDir "${params.outdir}/results/varbin${resolution}k/seg_short", mode: 'copy',
-               pattern: "*_short_seg.txt"
-    publishDir "${params.outdir}/results/varbin${resolution}k/ploidy", mode: 'copy',
-               pattern: "*.quantal.ploidy.txt"
-    publishDir "${params.outdir}/results/varbin${resolution}k/logs", mode: 'copy',
-               pattern: "*.quantal.log"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/seg_long", mode: 'copy',
+    //           pattern: "*_seg.txt"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/seg_short", mode: 'copy',
+    //           pattern: "*_short_seg.txt"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/ploidy", mode: 'copy',
+    //           pattern: "*.quantal.ploidy.txt"
+    // publishDir "${params.outdir}/results/varbin${resolution}k/logs", mode: 'copy',
+    //           pattern: "*.quantal.log"
 
     input:
     tuple val(cell_id), val(resolution), path(bin_counts), path(bin_stats)
@@ -153,14 +153,14 @@ process CNV_PLOIDY_SUMMARY {
     path combined_results
 
     output:
-    path "ploidy_summary_all.tsv", emit: ploidy_stats
+    path "ploidy_summary_all.txt", emit: ploidy_stats
 
     script:
     """
     # Run summary statistics with grouping by resolution
     ${projectDir}/bin/cnv_ploidy_summary.py \\
         -i ${combined_results} \\
-        -o ploidy_summary_all.tsv \\
+        -o ploidy_summary_all.txt \\
         --group-by resolution
   
     """
@@ -175,12 +175,12 @@ process AGGREGATE_SEG_MATRICES {
 
     output:
     path "chrom_info_${resolution}k.txt", emit: chrom_info
-    path "matrix_counts_${resolution}k.txt", emit: counts_matrix
-    path "matrix_ratio_${resolution}k.txt", emit: ratio_matrix
-    path "matrix_lowess_ratio_${resolution}k.txt", emit: lowess_ratio_matrix
-    path "matrix_seg_mean_${resolution}k.txt", emit: seg_mean_matrix
-    path "matrix_lowess_ratio_quantal_${resolution}k.txt", emit: lowess_ratio_quantal_matrix
-    path "matrix_seg_mean_quantal_${resolution}k.txt", emit: seg_mean_quantal_matrix
+    path "matrix_counts_${resolution}k.txt.gz", emit: counts_matrix
+    path "matrix_ratio_${resolution}k.txt.gz", emit: ratio_matrix
+    path "matrix_lowess_ratio_${resolution}k.txt.gz", emit: lowess_ratio_matrix
+    path "matrix_seg_mean_${resolution}k.txt.gz", emit: seg_mean_matrix
+    path "matrix_lowess_ratio_quantal_${resolution}k.txt.gz", emit: lowess_ratio_quantal_matrix
+    path "matrix_seg_mean_quantal_${resolution}k.txt.gz", emit: seg_mean_quantal_matrix
 
     script:
     """
