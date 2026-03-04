@@ -22,6 +22,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Conditional VARBIN outputs
 
 
+## [0.8.2] - 2026-03-04
+### Added
+- `cleanup = false` explicit default in generated config
+
+### Changed
+- Moved publishDir for GET_BIN_COUNTS and CNV_PROFILE from modules.config into process definitions (varbin.nf)
+- Disabled broken publishDir wildcard patterns in modules.config
+- Increased default max concurrent jobs: 50 → 200
+- Increased default submit rate: 10 sec → 1 sec
+- Removed redundant `maxRetries` from AGGREGATE/CREATE and long process blocks
+- Removed redundant `manifest` from `config/base.config`
+- Simplified README integration section and remove placeholder TODO
+
+
+### Fixed
+- Remove duplicate `--partition` in clusterOptions causing SLURM submission failures (null partition error)
+- Fix read count filter type cast from Long to Double in cell filtering (main.nf)
+- Fix includeConfig paths from `launchDir` to `projectDir` for portability
+
+
+
 ## [0.8.1] - 2025-11-20
 
 ### Added

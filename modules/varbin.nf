@@ -1,11 +1,11 @@
 // CNV Analysis using varbin from cna_utils
 process GET_BIN_COUNTS {
     tag "${cell_id}_${resolution}k"
-    // conditional publishDir in modules.config
-    // publishDir "${params.outdir}/results/varbin${resolution}k/counts", mode: 'copy',
-    //            pattern: "*.bin.counts.bed"
-    // publishDir "${params.outdir}/results/varbin${resolution}k/stats", mode: 'copy',
-    //            pattern: "*.bin.counts.stats.bed"
+    // 
+    publishDir "${params.outdir}/results/varbin${resolution}k/counts", mode: 'copy',
+        pattern: "*.bin.counts.bed"
+    publishDir "${params.outdir}/results/varbin${resolution}k/stats", mode: 'copy',
+        pattern: "*.bin.counts.stats.bed"
 
     input:
     tuple val(cell_id), path(strand_bam), path(strand_bai), val(resolution)
@@ -36,16 +36,16 @@ process GET_BIN_COUNTS {
 // create different directories for each output
 process CNV_PROFILE {
     tag "${cell_id}_${resolution}k"
+    //
+    publishDir "${params.outdir}/results/varbin${resolution}k/seg_long", mode: 'copy',
+        pattern: "*_seg.txt"
+    publishDir "${params.outdir}/results/varbin${resolution}k/seg_short", mode: 'copy',
+        pattern: "*_short_seg.txt"
+    publishDir "${params.outdir}/results/varbin${resolution}k/ploidy", mode: 'copy',
+        pattern: "*.quantal.ploidy.txt"
+    publishDir "${params.outdir}/results/varbin${resolution}k/logs", mode: 'copy',
+        pattern: "*.quantal.log"
     
-    // publishDir "${params.outdir}/results/varbin${resolution}k/seg_long", mode: 'copy',
-    //           pattern: "*_seg.txt"
-    // publishDir "${params.outdir}/results/varbin${resolution}k/seg_short", mode: 'copy',
-    //           pattern: "*_short_seg.txt"
-    // publishDir "${params.outdir}/results/varbin${resolution}k/ploidy", mode: 'copy',
-    //           pattern: "*.quantal.ploidy.txt"
-    // publishDir "${params.outdir}/results/varbin${resolution}k/logs", mode: 'copy',
-    //           pattern: "*.quantal.log"
-
     input:
     tuple val(cell_id), val(resolution), path(bin_counts), path(bin_stats)
 

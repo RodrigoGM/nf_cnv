@@ -135,11 +135,11 @@ SLURM_ACCOUNT=${SLURM_ACCOUNT:-singers}
 read -p "SLURM queue/partition (default: cpu): " SLURM_QUEUE
 SLURM_QUEUE=${SLURM_QUEUE:-cpu}
 
-read -p "Maximum concurrent jobs (default: 50): " MAX_JOBS
-MAX_JOBS=${MAX_JOBS:-50}
+read -p "Maximum concurrent jobs (default: 200): " MAX_JOBS
+MAX_JOBS=${MAX_JOBS:-200}
 
-read -p "Submit rate limit (default: '10 sec'): " SUBMIT_RATE
-SUBMIT_RATE=${SUBMIT_RATE:-'10 sec'}
+read -p "Submit rate limit (default: '1 sec'): " SUBMIT_RATE
+SUBMIT_RATE=${SUBMIT_RATE:-'1 sec'}
 
 # CPU/Memory configuration
 echo -e "\n${PURPLE}Resource Configuration:${NC}"
@@ -189,15 +189,18 @@ cat > "$CONFIG_DIR/nextflow.config" << EOL
  */
 
 // Include base configurations
-includeConfig "\${launchDir}/nf_cnv/conf/base.config"
-includeConfig "\${launchDir}/nf_cnv/conf/modules.config"
-includeConfig "\${launchDir}/nf_cnv/conf/slurm.config"
+includeConfig "\${projectDir}/conf/base.config"
+includeConfig "\${projectDir}/conf/modules.config"
+includeConfig "\${projectDir}/conf/slurm.config"
 
 // Project-specific configuration
 // Set work directory for this project
-// workDir = "${launchDir}/work"
+// workDir = "\${launchDir}/work"
 
+// Automatic cleaup of work dir
+cleanup = false
 
+// Parameter configuration
 params {
     // Project Information
     project = "$PROJECT_NAME"
@@ -228,7 +231,6 @@ process {
     // Critical/fast processes always on cpu
     withName: 'AGGREGATE_*|CREATE_*|MULTIQC' {
         queue = '$SLURM_QUEUE'
-        maxRetries = 10
     }
 
     // Long processes: split load
@@ -241,7 +243,6 @@ process {
         clusterOptions = { task.attempt > 6 ? 
             "--partition='$SLURM_QUEUE'" : ""  // Retries always go to $SLURM_QUEUE
         }
-        maxRetries = 10
     }
 
     // QC steps go mostly to preemptable
@@ -252,13 +253,10 @@ process {
         }
     
 	// Alternate on retry
-    	clusterOptions = { 
-            def partition = task.attempt % 2 == 1 ? 'preemptable' : '$SLURM_QUEUE'
-            "--partition=${partition}"
-    	}
-    
-	errorStrategy = 'retry'
-    	maxRetries = 10
+    	// clusterOptions = { 
+        //    def partition = task.attempt % 2 == 1 ? 'preemptable' : '$SLURM_QUEUE'
+        //    "--partition=${partition}"
+    	//}
     }
 
 }
@@ -570,17 +568,9 @@ For large datasets, consider adjusting:
 ### Integration
 
 Pipeline outputs can be integrated with:
-- Single cell analysis workflows (Seurat, Scanpy)
-- CNV detection tools
-- Downstream statistical analysis
+- R/gac: a CNV downstream visualization and statistical analysis
 
 ## Project Notes
-
-### TODO
-- [ ] Validate sample sheet entries
-- [ ] Optimize barcode parameters for your data
-- [ ] Review quality control thresholds
-- [ ] Set up downstream analysis workflows
 
 ### Changes Log
 - $(date): Project initialized with nf-cnv pipeline

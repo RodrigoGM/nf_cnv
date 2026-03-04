@@ -206,7 +206,7 @@ workflow {
 	)
 	.filter { combo_id, r1, r2, stats_file ->
             def count_line = stats_file.text.readLines()[0]
-            def read_count = (count_line.tokenize('\t').size() > 4) ? count_line.tokenize('\t')[4] as Long : 0L
+            def read_count = (count_line.tokenize('\t').size() > 4) ? count_line.tokenize('\t')[4] as Double : 0D
             read_count > params.minimum_read_count
 	}
 	.map { combo_id, r1, r2, stats_file -> tuple(combo_id, r1, r2) }
