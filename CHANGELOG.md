@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Conditional VARBIN outputs
 
 
+## [0.8.3] - 2026-04-17
+### Changed
+- `bin/delete_corrupted_barode_split.sh` modified to accept in-line cell names or `-f filename.txt` 
+- added documentation to script
+
+
 ## [0.8.2] - 2026-03-04
 ### Added
 - `cleanup = false` explicit default in generated config
